@@ -30,6 +30,7 @@ import studentsBulkDeleteHandler from './students/bulk-delete';
 import teachersHandler from './teachers/index';
 import { handleTeacherById } from './teachers/[id]';
 import teachersImportHandler from './teachers/import';
+import { handleTeachersBulkWorkingDays } from './teachers/bulk-working-days';
 import teachersBulkArchiveHandler from './teachers/bulk-archive';
 import teachersBulkDeleteHandler from './teachers/bulk-delete';
 import myTeacherScheduleHandler from './teachers/me/schedule';
@@ -39,6 +40,7 @@ import schedulesBulkDeleteHandler from './schedules/bulk-delete';
 import { handleScheduleById } from './schedules/[id]';
 import attendanceRulesHandler from './attendance-rules/index';
 import holidaysHandler, { handleHolidayById } from './holidays/index';
+import { handleHolidaysImport } from './holidays/import';
 import qrTokensHandler from './qr/tokens';
 import qrRevokeHandler from './qr/revoke';
 import portalStatusHandler from './portal/status';
@@ -271,6 +273,7 @@ export function createApiApp(): Express {
 
   app.all('/api/teachers/me/schedule', (req, res) => void myTeacherScheduleHandler(req, res));
   app.all('/api/teachers/import', (req, res) => void teachersImportHandler(req, res));
+  app.all('/api/teachers/bulk-working-days', (req, res) => void handleTeachersBulkWorkingDays(req, res));
   app.all('/api/teachers/bulk-archive', (req, res) => void teachersBulkArchiveHandler(req, res));
   app.all('/api/teachers/bulk-delete', (req, res) => void teachersBulkDeleteHandler(req, res));
   app.all('/api/teachers', (req, res) => void teachersHandler(req, res));
@@ -284,6 +287,7 @@ export function createApiApp(): Express {
 
   app.all('/api/attendance-rules', (req, res) => void attendanceRulesHandler(req, res));
 
+  app.all('/api/holidays/import', (req, res) => void handleHolidaysImport(req, res));
   app.all('/api/holidays', (req, res) => void holidaysHandler(req, res));
   app.all('/api/holidays/:id', (req, res) => void handleHolidayById(req, res, req.params.id));
 

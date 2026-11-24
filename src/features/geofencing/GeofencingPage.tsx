@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import type { z } from 'zod';
 import {
   AlertCircle,
   Archive,
@@ -24,6 +25,8 @@ import { schoolLocationCreateSchema } from '../../lib/teacherAttendanceValidatio
 import { ApiClientError } from '../../services/apiClient';
 import { attendanceService, type GpsSettingsConfig } from '../../services/attendanceService';
 import { UserRole, type SchoolLocation } from '../../types';
+
+type SchoolLocationCreateInput = z.infer<typeof schoolLocationCreateSchema>;
 
 interface LocationFormState {
   name: string;
@@ -70,9 +73,13 @@ export function GeofencingPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SchoolLocation | null>(null);
   const [form, setForm] = useState<LocationFormState>(DEFAULT_FORM);
+  const [initialForm, setInitialForm] = useState<LocationFormState>(DEFAULT_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [savingForm, setSavingForm] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
+  const [validatedDataToSave, setValidatedDataToSave] = useState<SchoolLocationCreateInput | null>(null);
 
   // Archive Confirmation
   const [archiving, setArchiving] = useState<SchoolLocation | null>(null);
@@ -110,28 +117,56 @@ export function GeofencingPage() {
 
   const openCreateModal = () => {
     setEditing(null);
-    setForm({
+    const initial: LocationFormState = {
       ...DEFAULT_FORM,
       latitude: previewLocation ? String(previewLocation.latitude) : DEFAULT_FORM.latitude,
       longitude: previewLocation ? String(previewLocation.longitude) : DEFAULT_FORM.longitude,
       name: '',
-    });
+    };
+    setForm(initial);
+    setInitialForm(initial);
     setFormError(null);
     setModalOpen(true);
   };
 
   const openEditModal = (loc: SchoolLocation) => {
     setEditing(loc);
-    setForm({
+    const initial: LocationFormState = {
       name: loc.name,
       latitude: String(loc.latitude),
       longitude: String(loc.longitude),
       radiusMeters: String(loc.radiusMeters),
       maxGpsAccuracyMeters: String(loc.maxGpsAccuracyMeters),
       isActive: loc.isActive,
-    });
+    };
+    setForm(initial);
+    setInitialForm(initial);
     setFormError(null);
     setModalOpen(true);
+  };
+
+  const isFormDirty =
+    form.name !== initialForm.name ||
+    form.latitude !== initialForm.latitude ||
+    form.longitude !== initialForm.longitude ||
+    form.radiusMeters !== initialForm.radiusMeters ||
+    form.maxGpsAccuracyMeters !== initialForm.maxGpsAccuracyMeters ||
+    form.isActive !== initialForm.isActive;
+
+  const handleRequestClose = () => {
+    if (savingForm) return;
+    if (isFormDirty) {
+      setConfirmCloseOpen(true);
+    } else {
+      setModalOpen(false);
+      setFormError(null);
+    }
+  };
+
+  const handleForceClose = () => {
+    setConfirmCloseOpen(false);
+    setModalOpen(false);
+    setFormError(null);
   };
 
   const handleUseDeviceLocation = () => {
@@ -163,7 +198,7 @@ export function GeofencingPage() {
     );
   };
 
-  const handleSaveLocation = async (e: FormEvent) => {
+  const handlePromptSaveLocation = (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -181,26 +216,35 @@ export function GeofencingPage() {
       return;
     }
 
+    setValidatedDataToSave(parsed.data);
+    setConfirmSaveOpen(true);
+  };
+
+  const handleExecuteSaveLocation = async () => {
+    if (!validatedDataToSave) return;
     setSavingForm(true);
     try {
       if (editing) {
-        await attendanceService.updateSchoolLocation(editing.id, parsed.data);
+        await attendanceService.updateSchoolLocation(editing.id, validatedDataToSave);
         showToast({
           variant: 'success',
           title: 'Lokasi diperbarui',
-          message: `Titik geofence "${parsed.data.name}" telah disimpan.`,
+          message: `Titik geofence "${validatedDataToSave.name}" telah disimpan.`,
         });
       } else {
-        await attendanceService.createSchoolLocation(parsed.data);
+        await attendanceService.createSchoolLocation(validatedDataToSave);
         showToast({
           variant: 'success',
           title: 'Lokasi ditambahkan',
-          message: `Titik geofence "${parsed.data.name}" berhasil dibuat.`,
+          message: `Titik geofence "${validatedDataToSave.name}" berhasil dibuat.`,
         });
       }
+      setConfirmSaveOpen(false);
+      setValidatedDataToSave(null);
       setModalOpen(false);
       await loadData();
     } catch (err) {
+      setConfirmSaveOpen(false);
       setFormError(
         err instanceof ApiClientError ? err.message : 'Gagal menyimpan titik lokasi sekolah.',
       );
@@ -526,11 +570,12 @@ export function GeofencingPage() {
       {/* Modal Tambah / Ubah Lokasi Sekolah */}
       <Modal
         open={modalOpen}
-        onClose={() => !savingForm && setModalOpen(false)}
+        onClose={handleRequestClose}
+        closeOnBackdrop={false}
         title={editing ? 'Ubah Titik Lokasi Sekolah' : 'Tambah Titik Lokasi Sekolah'}
         size="lg"
       >
-        <form onSubmit={handleSaveLocation} className="space-y-4">
+        <form onSubmit={handlePromptSaveLocation} className="space-y-4">
           {formError && (
             <div
               role="alert"
@@ -636,7 +681,7 @@ export function GeofencingPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setModalOpen(false)}
+              onClick={handleRequestClose}
               disabled={savingForm}
             >
               Batal
@@ -647,6 +692,31 @@ export function GeofencingPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Konfirmasi Simpan Lokasi */}
+      <ConfirmDialog
+        open={confirmSaveOpen}
+        onClose={() => !savingForm && setConfirmSaveOpen(false)}
+        onConfirm={() => void handleExecuteSaveLocation()}
+        title={editing ? 'Simpan Perubahan Titik Lokasi?' : 'Simpan Titik Lokasi Baru?'}
+        message={`Apakah Anda yakin ingin menyimpan titik lokasi "${validatedDataToSave?.name ?? form.name}" dengan radius ${validatedDataToSave?.radiusMeters ?? form.radiusMeters} meter dan akurasi GPS maksimal ${validatedDataToSave?.maxGpsAccuracyMeters ?? form.maxGpsAccuracyMeters} meter?`}
+        confirmLabel="Ya, Simpan Lokasi"
+        cancelLabel="Periksa Kembali"
+        variant="primary"
+        loading={savingForm}
+      />
+
+      {/* Konfirmasi Tutup / Batal Tanpa Simpan */}
+      <ConfirmDialog
+        open={confirmCloseOpen}
+        onClose={() => setConfirmCloseOpen(false)}
+        onConfirm={handleForceClose}
+        title="Batalkan Perubahan Lokasi?"
+        message="Perubahan koordinat atau pengaturan titik lokasi belum disimpan. Apakah Anda yakin ingin membatalkan dan keluar tanpa menyimpan?"
+        confirmLabel="Ya, Keluar Tanpa Simpan"
+        cancelLabel="Lanjutkan Mengedit"
+        variant="danger"
+      />
 
       <ConfirmDialog
         open={Boolean(archiving)}

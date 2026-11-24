@@ -216,4 +216,36 @@ export const scheduleRulesService = {
       { method: 'DELETE' },
     );
   },
+
+  previewHolidaysImport(rows: Array<Record<string, unknown>>) {
+    return apiRequest<{
+      total: number;
+      validCount: number;
+      invalidCount: number;
+      rows: Array<{
+        rowNumber: number;
+        date: string;
+        name: string;
+        scope: HolidayScope;
+        scopeLabel: string;
+        isActive: boolean;
+        valid: boolean;
+        errors: string[];
+      }>;
+    }>('/api/holidays/import', {
+      method: 'POST',
+      body: { mode: 'preview', rows },
+    });
+  },
+
+  commitHolidaysImport(rows: Array<Record<string, unknown>>) {
+    return apiRequest<{
+      success: boolean;
+      importedCount: number;
+      items: Array<{ id: string; date: string; name: string; scope: string }>;
+    }>('/api/holidays/import', {
+      method: 'POST',
+      body: { mode: 'commit', rows },
+    });
+  },
 };

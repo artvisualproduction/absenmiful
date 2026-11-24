@@ -814,7 +814,7 @@ var SEED_HOLIDAYS = [
 var FACTORY_ACADEMIC_YEARS = SEED_ACADEMIC_YEARS;
 var FACTORY_TEACHERS = [];
 var FACTORY_CLASSES = [];
-var FACTORY_SUBJECTS = SEED_SUBJECTS;
+var FACTORY_SUBJECTS = [];
 var FACTORY_TEACHING_SCHEDULES = [];
 var FACTORY_ATTENDANCE_RULES = [
   {
@@ -911,37 +911,40 @@ async function bootstrapInitialAccounts(repo, passwords, clientIp) {
       mustChangePassword: false
     });
   }
-  for (const teacher of teachersRes.items) {
-    const base = buildUsernameBaseFromName(teacher.fullName);
-    const availableUsername = await findAvailableUsername(repo, base);
-    const userId = `usr_${crypto2.randomBytes(6).toString("hex")}`;
-    const normalizedUsername = await reserveUniqueUsername(repo, availableUsername, userId);
-    const temporaryPassword = generateTemporaryPassword(12);
-    const passwordHash = await hashPassword(temporaryPassword);
-    await usersCol.create({
-      id: userId,
-      username: normalizedUsername,
-      normalizedUsername,
-      passwordHash,
-      passwordCipher: encryptPasswordForAdminView(temporaryPassword),
-      role: "TEACHER" /* TEACHER */,
-      linkedTeacherId: teacher.id,
-      isActive: true,
-      mustChangePassword: false,
-      lastLoginAt: null,
-      failedLoginCount: 0,
-      lockedUntil: null
-    });
-    await repo.collection("teachers" /* TEACHERS */).update(teacher.id, { userId });
-    accounts.push({
-      userId,
-      username: normalizedUsername,
-      role: "TEACHER" /* TEACHER */,
-      fullName: teacher.fullName,
-      linkedTeacherId: teacher.id,
-      mustChangePassword: false,
-      temporaryPassword
-    });
+  const shouldSeedTeachers = passwords.seedTeacherAccounts ?? true;
+  if (shouldSeedTeachers) {
+    for (const teacher of teachersRes.items) {
+      const base = buildUsernameBaseFromName(teacher.fullName);
+      const availableUsername = await findAvailableUsername(repo, base);
+      const userId = `usr_${crypto2.randomBytes(6).toString("hex")}`;
+      const normalizedUsername = await reserveUniqueUsername(repo, availableUsername, userId);
+      const temporaryPassword = generateTemporaryPassword(12);
+      const passwordHash = await hashPassword(temporaryPassword);
+      await usersCol.create({
+        id: userId,
+        username: normalizedUsername,
+        normalizedUsername,
+        passwordHash,
+        passwordCipher: encryptPasswordForAdminView(temporaryPassword),
+        role: "TEACHER" /* TEACHER */,
+        linkedTeacherId: teacher.id,
+        isActive: true,
+        mustChangePassword: false,
+        lastLoginAt: null,
+        failedLoginCount: 0,
+        lockedUntil: null
+      });
+      await repo.collection("teachers" /* TEACHERS */).update(teacher.id, { userId });
+      accounts.push({
+        userId,
+        username: normalizedUsername,
+        role: "TEACHER" /* TEACHER */,
+        fullName: teacher.fullName,
+        linkedTeacherId: teacher.id,
+        mustChangePassword: false,
+        temporaryPassword
+      });
+    }
   }
   const settingsCol = repo.collection("appSettings" /* APP_SETTINGS */);
   const currentSettings = await settingsCol.getById("default");
@@ -977,7 +980,7 @@ async function ensurePreviewAccountsInitialized(repo) {
     settingsCol.getById("default"),
     usersCol.count()
   ]);
-  const isRealMode = repo.mode === "real";
+  const isRealMode = repo.mode === "real" || repo.mode === "mysql";
   const baselineSettings = isRealMode ? FACTORY_APP_SETTINGS : SEED_APP_SETTINGS[0];
   let resolvedSettings = existingSettings;
   if (!existingSettings) {
@@ -1112,12 +1115,14 @@ async function ensurePreviewAccountsInitialized(repo) {
     repo,
     isRealMode ? {
       superAdminPassword: process.env.PREVIEW_SUPERADMIN_PASSWORD || "superadmin123",
-      portalExitPassword: process.env.PORTAL_DEFAULT_EXIT_PASSWORD || "123"
+      portalExitPassword: process.env.PORTAL_DEFAULT_EXIT_PASSWORD || "123",
+      seedTeacherAccounts: false
     } : {
       superAdminPassword: process.env.PREVIEW_SUPERADMIN_PASSWORD || "superadmin123",
       adminPassword: process.env.PREVIEW_ADMIN_PASSWORD || "admin123",
       principalPassword: process.env.PREVIEW_PRINCIPAL_PASSWORD || "kepsek123",
-      portalExitPassword: process.env.PORTAL_DEFAULT_EXIT_PASSWORD || "123"
+      portalExitPassword: process.env.PORTAL_DEFAULT_EXIT_PASSWORD || "123",
+      seedTeacherAccounts: true
     },
     "127.0.0.1"
   );
@@ -1209,6 +1214,7 @@ function getDataMode() {
     return "real";
   }
   const raw = (process.env.DATA_MODE ?? "").trim().toLowerCase();
+  if (raw === "mysql") return "mysql";
   if (raw === "mock") return "mock";
   return "real";
 }
@@ -1629,7 +1635,8 @@ var FirestoreRestCollectionRepository = class {
       createdAt: data.createdAt ?? now,
       updatedAt: data.updatedAt ?? now
     };
-    const querySuffix = data.id ? `?documentId=${encodeURIComponent(data.id)}` : "";
+    const resolvedId = data.id && data.id.trim().length > 0 ? data.id.trim() : `${this.collectionName.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toLowerCase() || "doc"}_${crypto3.randomBytes(10).toString("hex")}`;
+    const querySuffix = `?documentId=${encodeURIComponent(resolvedId)}`;
     const doc = await this.request(
       `${this.documentsRootUrl}/${this.collectionName}${querySuffix}`,
       {
@@ -1959,6 +1966,253 @@ var MockRepository = class {
   }
 };
 
+// backend/_lib/repository/mysqlRepository.ts
+import mysql from "mysql2/promise";
+import crypto5 from "node:crypto";
+function deepClone2(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+function matchesFilter3(doc, filter) {
+  const fieldValue = doc[filter.field];
+  const target = filter.value;
+  switch (filter.op) {
+    case "==":
+      return fieldValue === target;
+    case "!=":
+      return fieldValue !== target;
+    case "<":
+      return fieldValue < target;
+    case "<=":
+      return fieldValue <= target;
+    case ">":
+      return fieldValue > target;
+    case ">=":
+      return fieldValue >= target;
+    case "in":
+      return Array.isArray(target) && target.includes(fieldValue);
+    case "array-contains":
+      return Array.isArray(fieldValue) && fieldValue.includes(target);
+    default:
+      return false;
+  }
+}
+var MysqlCollectionRepository = class {
+  constructor(pool, collectionName, ensureReady) {
+    this.pool = pool;
+    this.collectionName = collectionName;
+    this.ensureReady = ensureReady;
+  }
+  async getById(id) {
+    await this.ensureReady();
+    const [rows] = await this.pool.execute(
+      "SELECT data FROM app_collections WHERE collection = ? AND id = ? LIMIT 1",
+      [this.collectionName, id]
+    );
+    if (!rows || rows.length === 0) return null;
+    try {
+      return JSON.parse(rows[0].data);
+    } catch {
+      return null;
+    }
+  }
+  async list(options = {}) {
+    await this.ensureReady();
+    const [rows] = await this.pool.execute(
+      "SELECT data FROM app_collections WHERE collection = ? ORDER BY created_at ASC",
+      [this.collectionName]
+    );
+    let items = [];
+    for (const row of rows) {
+      try {
+        items.push(JSON.parse(row.data));
+      } catch {
+      }
+    }
+    if (options.filters && options.filters.length > 0) {
+      items = items.filter((doc) => options.filters.every((f) => matchesFilter3(doc, f)));
+    }
+    if (options.sort) {
+      const { field, direction } = options.sort;
+      items.sort((a, b) => {
+        const av = a[field];
+        const bv = b[field];
+        if (av === bv) return 0;
+        if (av === void 0 || av === null) return 1;
+        if (bv === void 0 || bv === null) return -1;
+        const cmp = av < bv ? -1 : 1;
+        return direction === "asc" ? cmp : -cmp;
+      });
+    }
+    const total = items.length;
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? items.length;
+    const paginated = items.slice(offset, offset + limit);
+    return {
+      items: paginated.map((d) => deepClone2(d)),
+      total,
+      nextCursor: null
+    };
+  }
+  async findFirst(filters) {
+    const res = await this.list({ filters, limit: 1 });
+    return res.items[0] ?? null;
+  }
+  async create(data) {
+    await this.ensureReady();
+    const id = data.id ?? `doc_${crypto5.randomBytes(8).toString("hex")}`;
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const createdAt = data.createdAt ?? now;
+    const updatedAt = data.updatedAt ?? now;
+    const fullDoc = {
+      ...deepClone2(data),
+      id,
+      createdAt,
+      updatedAt
+    };
+    const serialized = JSON.stringify(fullDoc);
+    await this.pool.execute(
+      `INSERT INTO app_collections (collection, id, data, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE data = VALUES(data), updated_at = VALUES(updated_at)`,
+      [this.collectionName, id, serialized, createdAt, updatedAt]
+    );
+    return deepClone2(fullDoc);
+  }
+  async createIfNotExists(id, data) {
+    await this.ensureReady();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const createdAt = data.createdAt ?? now;
+    const updatedAt = data.updatedAt ?? now;
+    const fullDoc = {
+      ...deepClone2(data),
+      id,
+      createdAt,
+      updatedAt
+    };
+    const serialized = JSON.stringify(fullDoc);
+    const [res] = await this.pool.execute(
+      `INSERT IGNORE INTO app_collections (collection, id, data, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [this.collectionName, id, serialized, createdAt, updatedAt]
+    );
+    if (res.affectedRows === 1) {
+      return { created: true, doc: deepClone2(fullDoc) };
+    }
+    const existing = await this.getById(id);
+    if (!existing) {
+      return { created: false, doc: deepClone2(fullDoc) };
+    }
+    return { created: false, doc: existing };
+  }
+  async update(id, patch) {
+    await this.ensureReady();
+    const existing = await this.getById(id);
+    if (!existing) return null;
+    const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const merged = {
+      ...existing,
+      ...deepClone2(patch),
+      id,
+      updatedAt
+    };
+    const serialized = JSON.stringify(merged);
+    await this.pool.execute(
+      "UPDATE app_collections SET data = ?, updated_at = ? WHERE collection = ? AND id = ?",
+      [serialized, updatedAt, this.collectionName, id]
+    );
+    return deepClone2(merged);
+  }
+  async delete(id) {
+    await this.ensureReady();
+    const [res] = await this.pool.execute(
+      "DELETE FROM app_collections WHERE collection = ? AND id = ?",
+      [this.collectionName, id]
+    );
+    return res.affectedRows > 0;
+  }
+  async count(filters) {
+    await this.ensureReady();
+    if (!filters || filters.length === 0) {
+      const [rows] = await this.pool.execute(
+        "SELECT COUNT(*) as total FROM app_collections WHERE collection = ?",
+        [this.collectionName]
+      );
+      return Number(rows[0]?.total ?? 0);
+    }
+    const res = await this.list({ filters });
+    return res.total;
+  }
+};
+var MysqlRepository = class {
+  constructor(config = {}) {
+    this.mode = "mysql";
+    this.collections = /* @__PURE__ */ new Map();
+    this.readyPromise = null;
+    const host = config.host || process.env.MYSQL_HOST || "127.0.0.1";
+    const port = Number(config.port || process.env.MYSQL_PORT || 3306);
+    const user = config.user || process.env.MYSQL_USER || "root";
+    const password = config.password ?? process.env.MYSQL_PASSWORD ?? "";
+    this.dbName = config.database || process.env.MYSQL_DATABASE || "absen_miful";
+    this.pool = mysql.createPool({
+      host,
+      port,
+      user,
+      password,
+      database: this.dbName,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      charset: "utf8mb4"
+    });
+  }
+  async ensureSchema() {
+    if (!this.readyPromise) {
+      this.readyPromise = (async () => {
+        const host = process.env.MYSQL_HOST || "127.0.0.1";
+        const port = Number(process.env.MYSQL_PORT || 3306);
+        const user = process.env.MYSQL_USER || "root";
+        const password = process.env.MYSQL_PASSWORD ?? "";
+        try {
+          const initConn = await mysql.createConnection({ host, port, user, password });
+          await initConn.query(
+            `CREATE DATABASE IF NOT EXISTS \`${this.dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+          );
+          await initConn.end();
+        } catch (err) {
+          console.warn("[MysqlRepository] Warning during CREATE DATABASE check:", err);
+        }
+        await this.pool.execute(`
+          CREATE TABLE IF NOT EXISTS \`app_collections\` (
+            \`collection\` VARCHAR(64) NOT NULL,
+            \`id\` VARCHAR(128) NOT NULL,
+            \`data\` LONGTEXT NOT NULL,
+            \`created_at\` VARCHAR(64) NULL,
+            \`updated_at\` VARCHAR(64) NULL,
+            PRIMARY KEY (\`collection\`, \`id\`),
+            INDEX \`idx_coll_created\` (\`collection\`, \`created_at\`)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        `);
+      })();
+    }
+    return this.readyPromise;
+  }
+  collection(name) {
+    let repo = this.collections.get(name);
+    if (!repo) {
+      repo = new MysqlCollectionRepository(
+        this.pool,
+        name,
+        () => this.ensureSchema()
+      );
+      this.collections.set(name, repo);
+    }
+    return repo;
+  }
+  async close() {
+    await this.pool.end();
+  }
+};
+
 // backend/_lib/repository/index.ts
 var singletonRepo = null;
 var singletonMode = null;
@@ -1968,13 +2222,19 @@ function getRepository() {
     singletonMode = mode;
     const isTestEnv = process.env.NODE_ENV === "test" || Boolean(process.env.VITEST);
     const persistFilePath = mode === "mock" && !isTestEnv ? process.env.VERCEL === "1" ? "/tmp/absensi-mock-db.json" : path2.resolve(process.cwd(), ".local-data/mock-db.json") : void 0;
-    singletonRepo = mode === "real" ? new FirestoreRestRepository(getServerFirebaseConfig()) : new MockRepository(persistFilePath ? { persistFilePath } : {});
+    if (mode === "mysql") {
+      singletonRepo = new MysqlRepository();
+    } else if (mode === "real") {
+      singletonRepo = new FirestoreRestRepository(getServerFirebaseConfig());
+    } else {
+      singletonRepo = new MockRepository(persistFilePath ? { persistFilePath } : {});
+    }
   }
   return singletonRepo;
 }
 
 // backend/_lib/storage/privateStorage.ts
-import crypto5 from "node:crypto";
+import crypto6 from "node:crypto";
 
 // src/lib/permissionValidation.ts
 import { z as z2 } from "zod";
@@ -2143,7 +2403,7 @@ var gpsSettingsUpdateSchema = z3.object({
 
 // backend/_lib/storage/privateStorage.ts
 var privateBlobStore = /* @__PURE__ */ new Map();
-var FALLBACK_SIGNING_SECRET = crypto5.randomBytes(32).toString("hex");
+var FALLBACK_SIGNING_SECRET = crypto6.randomBytes(32).toString("hex");
 function getSigningSecret() {
   return process.env.SESSION_SECRET?.trim() || process.env.FILE_SIGNING_SECRET?.trim() || FALLBACK_SIGNING_SECRET;
 }
@@ -2223,7 +2483,7 @@ function getPrivateBlob(storagePath) {
   return privateBlobStore.get(storagePath) ?? null;
 }
 function signFileAccess(fileId, expiresAtEpochSec) {
-  return crypto5.createHmac("sha256", getSigningSecret()).update(`${fileId}:${expiresAtEpochSec}`).digest("base64url");
+  return crypto6.createHmac("sha256", getSigningSecret()).update(`${fileId}:${expiresAtEpochSec}`).digest("base64url");
 }
 function createSignedFileUrl(fileId, ttlSeconds = 300) {
   const exp = Math.floor(Date.now() / 1e3) + ttlSeconds;
@@ -2242,7 +2502,7 @@ function verifySignedFileSignature(fileId, expStr, sig, nowMs = Date.now()) {
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
-  return crypto5.timingSafeEqual(a, b);
+  return crypto6.timingSafeEqual(a, b);
 }
 var PRIVILEGED_VIEW_ROLES = /* @__PURE__ */ new Set([
   "SUPER_ADMIN" /* SUPER_ADMIN */,
@@ -2348,8 +2608,8 @@ async function handler(req, res) {
       databaseError = err instanceof Error ? err.message : "Koneksi ke database tidak dapat dijangkau.";
     }
     const latencyMs = Math.max(1, Date.now() - startedAt);
-    const persistent = dataMode === "real";
-    const databaseLabel = dataMode === "real" ? `Cloud Firestore (${firebaseConfig.projectId})` : "Database Lokal (Testing)";
+    const persistent = dataMode === "real" || dataMode === "mysql";
+    const databaseLabel = dataMode === "real" ? `Cloud Firestore (${firebaseConfig.projectId})` : dataMode === "mysql" ? `MySQL Database Lokal (Laragon)` : "Database Lokal (Testing)";
     sendOk(res, {
       status: databaseConnected ? "ok" : "degraded",
       dataMode,
@@ -2455,7 +2715,7 @@ async function handler2(req, res) {
 }
 
 // backend/_lib/auth/middleware.ts
-import crypto7 from "node:crypto";
+import crypto8 from "node:crypto";
 
 // backend/_lib/auth/cookies.ts
 var SESSION_COOKIE_NAME = "absensi_session";
@@ -2569,14 +2829,14 @@ function clearAuthCookies(req, res) {
 }
 
 // backend/_lib/auth/session.ts
-import crypto6 from "node:crypto";
+import crypto7 from "node:crypto";
 var SESSION_TTL_MS = 12 * 60 * 60 * 1e3;
 function getStatelessSessionSecret() {
   return process.env.SESSION_SECRET?.trim() || process.env.VERCEL_PROJECT_ID?.trim() || "absensi-digital-serverless-mock-session-v1";
 }
 function signMockSessionToken(payload) {
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-  const sig = crypto6.createHmac("sha256", getStatelessSessionSecret()).update(encoded).digest("base64url");
+  const sig = crypto7.createHmac("sha256", getStatelessSessionSecret()).update(encoded).digest("base64url");
   return `st1.${encoded}.${sig}`;
 }
 function verifyMockSessionToken(token) {
@@ -2585,10 +2845,10 @@ function verifyMockSessionToken(token) {
   if (parts.length !== 3) return null;
   const [, encoded, sig] = parts;
   if (!encoded || !sig) return null;
-  const expectedSig = crypto6.createHmac("sha256", getStatelessSessionSecret()).update(encoded).digest("base64url");
+  const expectedSig = crypto7.createHmac("sha256", getStatelessSessionSecret()).update(encoded).digest("base64url");
   const sigBuf = Buffer.from(sig);
   const expectedBuf = Buffer.from(expectedSig);
-  if (sigBuf.length !== expectedBuf.length || !crypto6.timingSafeEqual(sigBuf, expectedBuf)) {
+  if (sigBuf.length !== expectedBuf.length || !crypto7.timingSafeEqual(sigBuf, expectedBuf)) {
     return null;
   }
   try {
@@ -2625,7 +2885,7 @@ async function createUserSession(repo, userId, ttlMs = SESSION_TTL_MS) {
     const user = await repo.collection("users" /* USERS */).getById(userId);
     if (user) {
       rawSessionToken = signMockSessionToken({
-        sid: `sess_${crypto6.randomBytes(8).toString("hex")}`,
+        sid: `sess_${crypto7.randomBytes(8).toString("hex")}`,
         uid: user.id,
         un: user.normalizedUsername,
         exp: expiresMs
@@ -2725,7 +2985,7 @@ function timingSafeStringEqual(a, b) {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;
-  return crypto7.timingSafeEqual(bufA, bufB);
+  return crypto8.timingSafeEqual(bufA, bufB);
 }
 function assertCsrfToken(req) {
   const method = (req.method ?? "GET").toUpperCase();
@@ -4737,7 +4997,7 @@ async function handler20(req, res) {
 }
 
 // backend/teachers/index.ts
-import crypto8 from "node:crypto";
+import crypto9 from "node:crypto";
 async function handleTeachers(req, res, repo = getRepository()) {
   try {
     const teacherCol = repo.collection("teachers" /* TEACHERS */);
@@ -4802,12 +5062,12 @@ async function handleTeachers(req, res, repo = getRepository()) {
       }
       let createdUserId = null;
       let createdUsername = null;
-      const teacherId = `tch_${crypto8.randomBytes(6).toString("hex")}`;
+      const teacherId = `tch_${crypto9.randomBytes(6).toString("hex")}`;
       if (parsed.createAccount) {
         if (!parsed.password || parsed.password.length < 6) {
           throw ApiError.badRequest("Kata sandi akun guru wajib diisi minimal 6 karakter.");
         }
-        const userId = `usr_${crypto8.randomBytes(6).toString("hex")}`;
+        const userId = `usr_${crypto9.randomBytes(6).toString("hex")}`;
         const desiredBase = parsed.username && parsed.username.trim().length >= 3 ? parsed.username.trim() : await findAvailableUsername(repo, buildUsernameBaseFromName(parsed.fullName));
         const normalizedUsername = await reserveUniqueUsername(repo, desiredBase, userId);
         const passwordHash = await hashPassword(parsed.password);
@@ -4885,7 +5145,7 @@ async function handler21(req, res) {
 }
 
 // backend/teachers/[id].ts
-import crypto9 from "node:crypto";
+import crypto10 from "node:crypto";
 async function handleTeacherById(req, res, idOverride, repo = getRepository()) {
   try {
     const id = idOverride ?? getQueryString(req, "id");
@@ -4923,7 +5183,7 @@ async function handleTeacherById(req, res, idOverride, repo = getRepository()) {
       let linkedUserId = existing.userId;
       let accountProvisioned;
       if (parsed.createAccount && !existing.userId) {
-        const userId = `usr_${crypto9.randomBytes(6).toString("hex")}`;
+        const userId = `usr_${crypto10.randomBytes(6).toString("hex")}`;
         const desiredBase = parsed.username && parsed.username.trim().length >= 3 ? parsed.username.trim() : await findAvailableUsername(
           repo,
           buildUsernameBaseFromName(parsed.fullName ?? existing.fullName)
@@ -5184,6 +5444,52 @@ async function handleTeachersImport(req, res, repo = getRepository()) {
 }
 async function handler22(req, res) {
   await handleTeachersImport(req, res);
+}
+
+// backend/teachers/bulk-working-days.ts
+import { z as z11 } from "zod";
+var bulkWorkingDaysSchema = z11.object({
+  teacherIds: z11.array(z11.string().trim().min(1)).min(1, "Pilih minimal 1 guru."),
+  workingDays: z11.array(z11.number().int().min(1).max(7)).min(1, "Pilih minimal 1 hari kerja aktif.")
+});
+async function handleTeachersBulkWorkingDays(req, res, repo = getRepository()) {
+  try {
+    if (req.method !== "POST") {
+      throw new ApiError(405, "METHOD_NOT_ALLOWED", "Metode harus POST.");
+    }
+    const auth = await requireAuth(req, { repo, allowedRoles: MASTER_WRITE_ROLES });
+    const parsed = bulkWorkingDaysSchema.parse(req.body ?? {});
+    const teacherCol = repo.collection("teachers" /* TEACHERS */);
+    const sortedDays = Array.from(new Set(parsed.workingDays)).sort((a, b) => a - b);
+    let updatedCount = 0;
+    for (const teacherId of parsed.teacherIds) {
+      const existing = await teacherCol.getById(teacherId);
+      if (existing) {
+        await teacherCol.update(teacherId, { workingDays: sortedDays });
+        updatedCount++;
+      }
+    }
+    await recordActivityLog(repo, {
+      actorUserId: auth.user.id,
+      actorRole: auth.user.role,
+      action: "TEACHERS_BULK_WORKING_DAYS_UPDATED",
+      entityType: "TEACHER",
+      entityId: "bulk",
+      after: {
+        requestedCount: parsed.teacherIds.length,
+        updatedCount,
+        workingDays: sortedDays
+      },
+      clientIp: auth.clientIp
+    });
+    sendOk(res, {
+      success: true,
+      updatedCount,
+      workingDays: sortedDays
+    });
+  } catch (err) {
+    sendError(res, err);
+  }
 }
 
 // backend/teachers/bulk-archive.ts
@@ -5453,7 +5759,7 @@ async function handler25(req, res) {
 }
 
 // src/lib/scheduleRulesValidation.ts
-import { z as z11 } from "zod";
+import { z as z12 } from "zod";
 var DAY_OF_WEEK_OPTIONS = [
   { value: 1, label: "Senin", short: "Sen" },
   { value: 2, label: "Selasa", short: "Sel" },
@@ -5463,56 +5769,56 @@ var DAY_OF_WEEK_OPTIONS = [
   { value: 6, label: "Sabtu", short: "Sab" },
   { value: 7, label: "Minggu", short: "Min" }
 ];
-var teachingScheduleCreateSchema = z11.object({
-  teacherId: z11.string().trim().min(1, "Guru wajib dipilih."),
-  subjectId: z11.string().trim().min(1, "Mata pelajaran wajib dipilih."),
-  classId: z11.string().trim().min(1, "Kelas wajib dipilih."),
-  dayOfWeek: z11.coerce.number().int().min(1, "Hari harus antara 1 (Senin) sampai 7 (Minggu).").max(7),
+var teachingScheduleCreateSchema = z12.object({
+  teacherId: z12.string().trim().min(1, "Guru wajib dipilih."),
+  subjectId: z12.string().trim().min(1, "Mata pelajaran wajib dipilih."),
+  classId: z12.string().trim().min(1, "Kelas wajib dipilih."),
+  dayOfWeek: z12.coerce.number().int().min(1, "Hari harus antara 1 (Senin) sampai 7 (Minggu).").max(7),
   startTime: timeHHMMSchema,
   endTime: timeHHMMSchema,
-  room: z11.string().trim().max(60).nullable().optional().default(null),
-  effectiveFrom: z11.string().min(8, "Tanggal mulai berlaku wajib diisi."),
-  effectiveUntil: z11.string().nullable().optional().default(null),
-  isActive: z11.boolean().default(true)
+  room: z12.string().trim().max(60).nullable().optional().default(null),
+  effectiveFrom: z12.string().min(8, "Tanggal mulai berlaku wajib diisi."),
+  effectiveUntil: z12.string().nullable().optional().default(null),
+  isActive: z12.boolean().default(true)
 });
 var teachingScheduleUpdateSchema = teachingScheduleCreateSchema.partial();
-var teachingScheduleImportRowSchema = z11.object({
-  className: z11.string().trim(),
-  subjectCodeOrName: z11.string().trim(),
-  dayOfWeek: z11.union([z11.coerce.number(), z11.string().trim()]),
-  startTime: z11.string().trim(),
-  endTime: z11.string().trim(),
-  teacherNiyOrName: z11.string().trim().optional().default(""),
-  useHomeroomTeacher: z11.union([z11.boolean(), z11.string().trim()]).optional().default(false),
-  room: z11.string().trim().max(60).optional().default(""),
-  isActive: z11.union([z11.boolean(), z11.string().trim()]).optional().default(true)
+var teachingScheduleImportRowSchema = z12.object({
+  className: z12.string().trim(),
+  subjectCodeOrName: z12.string().trim(),
+  dayOfWeek: z12.union([z12.coerce.number(), z12.string().trim()]),
+  startTime: z12.string().trim(),
+  endTime: z12.string().trim(),
+  teacherNiyOrName: z12.string().trim().optional().default(""),
+  useHomeroomTeacher: z12.union([z12.boolean(), z12.string().trim()]).optional().default(false),
+  room: z12.string().trim().max(60).optional().default(""),
+  isActive: z12.union([z12.boolean(), z12.string().trim()]).optional().default(true)
 });
-var teachingScheduleImportRequestSchema = z11.object({
-  mode: z11.enum(["preview", "commit"]),
-  effectiveFrom: z11.string().optional(),
-  rows: z11.array(teachingScheduleImportRowSchema).min(1, "Minimal 1 baris jadwal untuk diimpor.").max(500)
+var teachingScheduleImportRequestSchema = z12.object({
+  mode: z12.enum(["preview", "commit"]),
+  effectiveFrom: z12.string().optional(),
+  rows: z12.array(teachingScheduleImportRowSchema).min(1, "Minimal 1 baris jadwal untuk diimpor.").max(500)
 });
-var attendanceRuleCreateSchema = z11.object({
-  name: z11.string().trim().min(2, "Nama aturan minimal 2 karakter.").max(100),
-  audience: z11.enum(["STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]),
-  classIds: z11.array(z11.string().trim().min(1)).default([]),
-  daysOfWeek: z11.array(z11.coerce.number().int().min(1).max(7)).min(1, "Pilih minimal 1 hari aktif."),
+var attendanceRuleCreateSchema = z12.object({
+  name: z12.string().trim().min(2, "Nama aturan minimal 2 karakter.").max(100),
+  audience: z12.enum(["STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]),
+  classIds: z12.array(z12.string().trim().min(1)).default([]),
+  daysOfWeek: z12.array(z12.coerce.number().int().min(1).max(7)).min(1, "Pilih minimal 1 hari aktif."),
   checkInStart: timeHHMMSchema,
   lateAfter: timeHHMMSchema,
-  lateToleranceMinutes: z11.coerce.number().int().min(0).max(120).default(0),
+  lateToleranceMinutes: z12.coerce.number().int().min(0).max(120).default(0),
   checkInDeadline: timeHHMMSchema,
   checkOutStart: timeHHMMSchema,
   checkOutDeadline: timeHHMMSchema,
-  gpsRequired: z11.boolean().default(true),
-  geofenceRequired: z11.boolean().default(false),
-  effectiveFrom: z11.string().min(8, "Tanggal mulai berlaku wajib diisi."),
-  isActive: z11.boolean().default(true)
+  gpsRequired: z12.boolean().default(true),
+  geofenceRequired: z12.boolean().default(false),
+  effectiveFrom: z12.string().min(8, "Tanggal mulai berlaku wajib diisi."),
+  isActive: z12.boolean().default(true)
 });
-var holidayCreateSchema = z11.object({
+var holidayCreateSchema = z12.object({
   date: dateYYYYMMDDSchema,
-  name: z11.string().trim().min(2, "Nama hari libur/pengecualian minimal 2 karakter.").max(120),
-  scope: z11.enum(["SCHOOL" /* SCHOOL */, "STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]).default("SCHOOL" /* SCHOOL */),
-  isActive: z11.boolean().default(true)
+  name: z12.string().trim().min(2, "Nama hari libur/pengecualian minimal 2 karakter.").max(120),
+  scope: z12.enum(["SCHOOL" /* SCHOOL */, "STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]).default("SCHOOL" /* SCHOOL */),
+  isActive: z12.boolean().default(true)
 });
 var holidayUpdateSchema = holidayCreateSchema.partial();
 
@@ -5915,9 +6221,9 @@ async function handler27(req, res) {
 }
 
 // backend/schedules/bulk-delete.ts
-import { z as z12 } from "zod";
-var scheduleBulkDeleteSchema = z12.object({
-  ids: z12.array(z12.string().trim().min(1)).min(1, "Pilih minimal 1 jadwal mengajar untuk dihapus.")
+import { z as z13 } from "zod";
+var scheduleBulkDeleteSchema = z13.object({
+  ids: z13.array(z13.string().trim().min(1)).min(1, "Pilih minimal 1 jadwal mengajar untuk dihapus.")
 });
 async function handleSchedulesBulkDelete(req, res, repo = getRepository()) {
   try {
@@ -6313,57 +6619,208 @@ async function handler30(req, res) {
   await handleHolidays(req, res);
 }
 
+// backend/holidays/import.ts
+function parseDateString(raw) {
+  if (!raw) return null;
+  const str = String(raw).trim();
+  if (!str) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const d = new Date(str);
+    if (!Number.isNaN(d.getTime())) return str;
+  }
+  const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, "0");
+    const month = dmyMatch[2].padStart(2, "0");
+    const year = dmyMatch[3];
+    const iso = `${year}-${month}-${day}`;
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) return iso;
+  }
+  const num = Number(str);
+  if (!Number.isNaN(num) && num > 3e4 && num < 6e4) {
+    const date = new Date(Math.round((num - 25569) * 86400 * 1e3));
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString().slice(0, 10);
+    }
+  }
+  return null;
+}
+function resolveScope(raw) {
+  const str = String(raw ?? "").trim().toUpperCase();
+  if (str.includes("GURU")) return "TEACHER" /* TEACHER */;
+  if (str.includes("SISWA")) return "STUDENT" /* STUDENT */;
+  return "SCHOOL" /* SCHOOL */;
+}
+function getScopeLabel(scope) {
+  switch (scope) {
+    case "TEACHER" /* TEACHER */:
+      return "Khusus Guru";
+    case "STUDENT" /* STUDENT */:
+      return "Khusus Siswa";
+    default:
+      return "Semua (Sekolah)";
+  }
+}
+async function handleHolidaysImport(req, res, repo = getRepository()) {
+  try {
+    if (req.method !== "POST") {
+      throw new ApiError(405, "METHOD_NOT_ALLOWED", "Metode harus POST.");
+    }
+    const auth = await requireAuth(req, { repo, allowedRoles: MASTER_WRITE_ROLES });
+    const body = req.body;
+    const mode = body?.mode ?? "preview";
+    const rawRows = body?.rows ?? [];
+    if (!Array.isArray(rawRows) || rawRows.length === 0) {
+      throw ApiError.badRequest("Minimal 1 baris data hari libur untuk diimpor.");
+    }
+    const holidaysCol = repo.collection("holidays" /* HOLIDAYS */);
+    const existingHolidays = await holidaysCol.list();
+    const existingDateKeys = new Set(
+      existingHolidays.items.filter((h) => h.isActive).map((h) => `${h.date}_${h.scope}`)
+    );
+    const previewRows = [];
+    const seenImportKeys = /* @__PURE__ */ new Set();
+    rawRows.forEach((row, idx) => {
+      const rowNumber = idx + 1;
+      const errors = [];
+      const rawDate = row.date ?? row.tanggal ?? row.tgl ?? row.waktu;
+      const parsedDate = parseDateString(rawDate);
+      const name = String(row.name ?? row.nama ?? row.keterangan ?? row.namalibur ?? "").trim();
+      const scope = resolveScope(row.scope ?? row.cakupan ?? row.lingkup ?? row.sasaran);
+      const scopeLabel = getScopeLabel(scope);
+      const isActive = row.isActive !== false && String(row.status ?? "").toUpperCase() !== "NONAKTIF";
+      if (!parsedDate) {
+        errors.push(`Format tanggal tidak valid ("${String(rawDate ?? "")}"). Gunakan YYYY-MM-DD atau DD/MM/YYYY.`);
+      }
+      if (!name || name.length < 3) {
+        errors.push("Nama hari libur wajib diisi (minimal 3 karakter).");
+      }
+      if (parsedDate) {
+        const key = `${parsedDate}_${scope}`;
+        if (seenImportKeys.has(key)) {
+          errors.push(`Tanggal ${parsedDate} dengan cakupan ini ganda di dalam file Excel.`);
+        } else {
+          seenImportKeys.add(key);
+        }
+        if (existingDateKeys.has(key)) {
+          errors.push(`Tanggal libur ${parsedDate} (${scopeLabel}) sudah terdaftar di sistem.`);
+        }
+      }
+      previewRows.push({
+        rowNumber,
+        date: parsedDate ?? String(rawDate ?? ""),
+        name: name || "\u2014",
+        scope,
+        scopeLabel,
+        isActive,
+        valid: errors.length === 0,
+        errors
+      });
+    });
+    const validRows = previewRows.filter((r) => r.valid);
+    if (mode === "preview") {
+      sendOk(res, {
+        total: previewRows.length,
+        validCount: validRows.length,
+        invalidCount: previewRows.length - validRows.length,
+        rows: previewRows
+      });
+      return;
+    }
+    if (validRows.length === 0) {
+      throw ApiError.badRequest("Tidak ada baris data hari libur yang valid untuk disimpan.");
+    }
+    const createdItems = [];
+    for (const row of validRows) {
+      const created = await holidaysCol.create({
+        date: row.date,
+        name: row.name,
+        scope: row.scope,
+        isActive: row.isActive,
+        createdBy: auth.user.id
+      });
+      createdItems.push({
+        id: created.id,
+        date: created.date,
+        name: created.name,
+        scope: created.scope
+      });
+    }
+    await recordActivityLog(repo, {
+      actorUserId: auth.user.id,
+      actorRole: auth.user.role,
+      action: "HOLIDAYS_BULK_IMPORTED",
+      entityType: "HOLIDAY",
+      entityId: "bulk",
+      after: {
+        totalRequested: rawRows.length,
+        importedCount: createdItems.length,
+        items: createdItems.slice(0, 20)
+      },
+      clientIp: auth.clientIp
+    });
+    sendOk(res, {
+      success: true,
+      importedCount: createdItems.length,
+      items: createdItems
+    });
+  } catch (err) {
+    sendError(res, err);
+  }
+}
+
 // src/lib/attendanceScanValidation.ts
-import { z as z13 } from "zod";
-var qrIssueSchema = z13.object({
-  ownerType: z13.enum(["STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]),
-  ownerId: z13.string().trim().min(1, "ID pemilik wajib diisi.")
+import { z as z14 } from "zod";
+var qrIssueSchema = z14.object({
+  ownerType: z14.enum(["STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]),
+  ownerId: z14.string().trim().min(1, "ID pemilik wajib diisi.")
 });
-var qrRevokeSchema = z13.object({
-  qrTokenId: z13.string().trim().min(1).optional(),
-  ownerType: z13.enum(["STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]).optional(),
-  ownerId: z13.string().trim().min(1).optional(),
-  reason: z13.string().trim().max(200).optional()
+var qrRevokeSchema = z14.object({
+  qrTokenId: z14.string().trim().min(1).optional(),
+  ownerType: z14.enum(["STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]).optional(),
+  ownerId: z14.string().trim().min(1).optional(),
+  reason: z14.string().trim().max(200).optional()
 }).refine((data) => Boolean(data.qrTokenId || data.ownerType && data.ownerId), {
   message: "Sertakan qrTokenId atau pasangan ownerType dan ownerId."
 });
-var attendanceScanSchema = z13.object({
-  token: z13.string().trim().min(2, "Kode QR / NIS / NIY tidak valid.").max(256),
-  eventType: z13.enum(["CHECK_IN" /* CHECK_IN */, "CHECK_OUT" /* CHECK_OUT */, "AUTO"]).default("AUTO"),
-  latitude: z13.number().min(-90).max(90).nullable().optional().default(null),
-  longitude: z13.number().min(-180).max(180).nullable().optional().default(null),
-  gpsAccuracyMeters: z13.number().min(0).max(1e5).nullable().optional().default(null),
-  idempotencyKey: z13.string().trim().min(8, "Idempotency key minimal 8 karakter.").max(128),
-  clientTimestamp: z13.string().nullable().optional().default(null),
-  deviceInfo: z13.string().trim().max(200).nullable().optional().default(null),
-  selfieFileId: z13.string().trim().min(4).max(120).nullable().optional().default(null)
+var attendanceScanSchema = z14.object({
+  token: z14.string().trim().min(2, "Kode QR / NIS / NIY tidak valid.").max(256),
+  eventType: z14.enum(["CHECK_IN" /* CHECK_IN */, "CHECK_OUT" /* CHECK_OUT */, "AUTO"]).default("AUTO"),
+  latitude: z14.number().min(-90).max(90).nullable().optional().default(null),
+  longitude: z14.number().min(-180).max(180).nullable().optional().default(null),
+  gpsAccuracyMeters: z14.number().min(0).max(1e5).nullable().optional().default(null),
+  idempotencyKey: z14.string().trim().min(8, "Idempotency key minimal 8 karakter.").max(128),
+  clientTimestamp: z14.string().nullable().optional().default(null),
+  deviceInfo: z14.string().trim().max(200).nullable().optional().default(null),
+  selfieFileId: z14.string().trim().min(4).max(120).nullable().optional().default(null)
 });
-var attendanceCorrectionSchema = z13.object({
-  status: z13.enum([
+var attendanceCorrectionSchema = z14.object({
+  status: z14.enum([
     "PRESENT" /* PRESENT */,
     "LATE" /* LATE */,
     "SICK" /* SICK */,
     "EXCUSED" /* EXCUSED */,
     "ABSENT" /* ABSENT */
   ]),
-  reason: z13.string().trim().min(5, "Alasan koreksi wajib diisi (minimal 5 karakter).").max(400)
+  reason: z14.string().trim().min(5, "Alasan koreksi wajib diisi (minimal 5 karakter).").max(400)
 });
-var portalActivateSchema = z13.object({
-  username: z13.string().trim().min(3, "Username wajib diisi.").max(64),
-  password: z13.string().min(1, "Kata sandi wajib diisi.").max(128)
+var portalActivateSchema = z14.object({
+  username: z14.string().trim().min(3, "Username wajib diisi.").max(64),
+  password: z14.string().min(1, "Kata sandi wajib diisi.").max(128)
 });
-var portalExitSchema = z13.object({
-  password: z13.string().min(1, "Kata sandi keluar portal wajib diisi.").max(128)
+var portalExitSchema = z14.object({
+  password: z14.string().min(1, "Kata sandi keluar portal wajib diisi.").max(128)
 });
 
 // backend/_lib/qr/tokenService.ts
-import crypto10 from "node:crypto";
+import crypto11 from "node:crypto";
 function generateHighEntropyQrToken() {
-  const randomPart = crypto10.randomBytes(32).toString("base64url");
+  const randomPart = crypto11.randomBytes(32).toString("base64url");
   return `QR1.${randomPart}`;
 }
 function hashQrToken(rawToken) {
-  return crypto10.createHash("sha256").update(rawToken.trim()).digest("hex");
+  return crypto11.createHash("sha256").update(rawToken.trim()).digest("hex");
 }
 async function issueQrToken(repo, ownerType, ownerId, actor) {
   let ownerName = "";
@@ -6395,7 +6852,7 @@ async function issueQrToken(repo, ownerType, ownerId, actor) {
   );
   const rawToken = generateHighEntropyQrToken();
   const tokenHash = hashQrToken(rawToken);
-  const qrTokenId = `qr_${crypto10.randomBytes(8).toString("hex")}`;
+  const qrTokenId = `qr_${crypto11.randomBytes(8).toString("hex")}`;
   const created = await qrCol.create({
     id: qrTokenId,
     tokenHash,
@@ -7855,7 +8312,7 @@ async function handler39(req, res) {
 }
 
 // backend/attendance/manual-exception.ts
-import crypto11 from "node:crypto";
+import crypto12 from "node:crypto";
 async function handleManualExceptionAttendance(req, res, repo = getRepository()) {
   try {
     if (req.method !== "POST") {
@@ -7906,7 +8363,7 @@ async function handleManualExceptionAttendance(req, res, repo = getRepository())
       geofencePassed: null,
       selfiePath: null,
       deviceInfo: "Pengecualian Manual Admin",
-      idempotencyKey: `manual_${crypto11.randomBytes(8).toString("hex")}`,
+      idempotencyKey: `manual_${crypto12.randomBytes(8).toString("hex")}`,
       corrected: true,
       correctionReason: parsed.reason,
       anomalyFlags: ["MANUAL_GPS_EXCEPTION"],
@@ -7943,7 +8400,7 @@ async function handler40(req, res) {
 }
 
 // backend/uploads/selfie.ts
-import crypto12 from "node:crypto";
+import crypto13 from "node:crypto";
 var UPLOAD_ALLOWED_ROLES = [
   "SUPER_ADMIN" /* SUPER_ADMIN */,
   "ADMIN" /* ADMIN */,
@@ -7992,7 +8449,7 @@ async function handleUploadSelfie(req, res, repo = getRepository()) {
     const retentionUntil = new Date(
       Date.now() + retentionDays * 24 * 60 * 60 * 1e3
     ).toISOString();
-    const fileId = `fil_${crypto12.randomBytes(8).toString("hex")}`;
+    const fileId = `fil_${crypto13.randomBytes(8).toString("hex")}`;
     const storagePath = buildPrivateStoragePath(
       "ATTENDANCE_SELFIE" /* ATTENDANCE_SELFIE */,
       resolvedOwnerId,
@@ -8051,10 +8508,10 @@ async function handler41(req, res) {
 }
 
 // backend/uploads/signed-url.ts
-import { z as z14 } from "zod";
-var signedUrlRequestSchema = z14.object({
-  fileId: z14.string().trim().min(1).optional(),
-  storagePath: z14.string().trim().min(1).optional()
+import { z as z15 } from "zod";
+var signedUrlRequestSchema = z15.object({
+  fileId: z15.string().trim().min(1).optional(),
+  storagePath: z15.string().trim().min(1).optional()
 }).refine((d) => Boolean(d.fileId || d.storagePath), {
   message: "Sertakan fileId atau storagePath."
 });
@@ -8347,7 +8804,7 @@ async function handler45(req, res) {
 }
 
 // backend/uploads/attachment.ts
-import crypto13 from "node:crypto";
+import crypto14 from "node:crypto";
 async function handleUploadPermissionAttachment(req, res, repo = getRepository()) {
   try {
     if (req.method !== "POST") {
@@ -8370,7 +8827,7 @@ async function handleUploadPermissionAttachment(req, res, repo = getRepository()
     const retentionUntil = new Date(
       Date.now() + retentionDays * 24 * 60 * 60 * 1e3
     ).toISOString();
-    const fileId = `attf_${crypto13.randomBytes(8).toString("hex")}`;
+    const fileId = `attf_${crypto14.randomBytes(8).toString("hex")}`;
     const storagePath = buildPrivateStoragePath(
       "PERMISSION_ATTACHMENT" /* PERMISSION_ATTACHMENT */,
       auth.user.linkedTeacherId,
@@ -9421,17 +9878,17 @@ async function handler49(req, res) {
 }
 
 // src/lib/reportValidation.ts
-import { z as z15 } from "zod";
+import { z as z16 } from "zod";
 var REPORT_PERIODS = ["daily", "weekly", "monthly", "yearly", "custom"];
 var REPORT_DIMENSIONS = ["STUDENT", "TEACHER", "ALL"];
-var reportQuerySchema = z15.object({
-  period: z15.enum(REPORT_PERIODS).default("monthly"),
-  referenceDate: z15.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal harus YYYY-MM-DD.").optional(),
-  dateFrom: z15.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal awal harus YYYY-MM-DD.").optional(),
-  dateTo: z15.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal akhir harus YYYY-MM-DD.").optional(),
-  dimension: z15.enum(REPORT_DIMENSIONS).default("STUDENT"),
-  classId: z15.string().trim().optional(),
-  status: z15.enum([
+var reportQuerySchema = z16.object({
+  period: z16.enum(REPORT_PERIODS).default("monthly"),
+  referenceDate: z16.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal harus YYYY-MM-DD.").optional(),
+  dateFrom: z16.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal awal harus YYYY-MM-DD.").optional(),
+  dateTo: z16.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal akhir harus YYYY-MM-DD.").optional(),
+  dimension: z16.enum(REPORT_DIMENSIONS).default("STUDENT"),
+  classId: z16.string().trim().optional(),
+  status: z16.enum([
     "",
     "PRESENT" /* PRESENT */,
     "LATE" /* LATE */,
@@ -9441,12 +9898,12 @@ var reportQuerySchema = z15.object({
     "MISSING_CHECK_IN",
     "MISSING_CHECK_OUT"
   ]).optional().default(""),
-  search: z15.string().trim().max(120).optional().default(""),
-  cursor: z15.string().trim().optional(),
-  limit: z15.coerce.number().int().min(1).max(2e3).optional().default(25)
+  search: z16.string().trim().max(120).optional().default(""),
+  cursor: z16.string().trim().optional(),
+  limit: z16.coerce.number().int().min(1).max(2e3).optional().default(25)
 });
 var reportExportSchema = reportQuerySchema.extend({
-  format: z15.enum(["XLSX", "PDF", "PRINT"])
+  format: z16.enum(["XLSX", "PDF", "PRINT"])
 });
 
 // backend/reports/attendance.ts
@@ -9489,15 +9946,15 @@ async function handler50(req, res) {
 }
 
 // backend/reports/matrix.ts
-import { z as z16 } from "zod";
-var matrixQuerySchema = z16.object({
-  period: z16.enum(["weekly", "monthly", "custom"]).default("weekly"),
-  referenceDate: z16.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  dateFrom: z16.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  dateTo: z16.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  dimension: z16.enum(["STUDENT", "TEACHER"]).default("STUDENT"),
-  classId: z16.string().trim().optional(),
-  search: z16.string().trim().max(120).optional().default("")
+import { z as z17 } from "zod";
+var matrixQuerySchema = z17.object({
+  period: z17.enum(["weekly", "monthly", "custom"]).default("weekly"),
+  referenceDate: z17.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateFrom: z17.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateTo: z17.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dimension: z17.enum(["STUDENT", "TEACHER"]).default("STUDENT"),
+  classId: z17.string().trim().optional(),
+  search: z17.string().trim().max(120).optional().default("")
 });
 var DAY_LABELS_ID = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 function resolveMatrixDateRange(period, referenceDate, dateFromInput, dateToInput, todayKey) {
@@ -9857,7 +10314,7 @@ async function handler52(req, res) {
 }
 
 // src/lib/adminSettingsValidation.ts
-import { z as z17 } from "zod";
+import { z as z18 } from "zod";
 var ALLOWED_BRANDING_MIME_TYPES = [
   "image/png",
   "image/jpeg",
@@ -9875,101 +10332,103 @@ var BRANDING_SLOTS = [
 function getMaxBrandingBytes(slot) {
   return slot === "loginBackground" ? MAX_LOGIN_BACKGROUND_BYTES : MAX_BRANDING_BYTES;
 }
-var hexColorSchema = z17.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, "Warna harus berformat heksadesimal #RRGGBB.");
+var hexColorSchema = z18.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, "Warna harus berformat heksadesimal #RRGGBB.");
 var PORTAL_SCAN_METHODS = [
   "CAMERA_AND_USB",
   "CAMERA_ONLY",
   "USB_SCANNER_ONLY",
   "MANUAL_AND_SCANNER"
 ];
-var appSettingsUpdateSchema = z17.object({
-  appName: z17.string().trim().min(2, "Nama aplikasi minimal 2 karakter.").max(60).optional(),
-  pwaAppName: z17.string().trim().min(2, "Nama aplikasi PWA minimal 2 karakter.").max(25, "Nama aplikasi PWA maksimal 25 karakter.").optional(),
-  schoolName: z17.string().trim().min(3, "Nama sekolah minimal 3 karakter.").max(140).optional(),
-  schoolAddress: z17.string().trim().min(5, "Alamat sekolah minimal 5 karakter.").max(300).optional(),
-  schoolBio: z17.string().trim().max(500).optional(),
-  timezone: z17.string().trim().min(3).max(60).optional(),
-  theme: z17.object({
+var appSettingsUpdateSchema = z18.object({
+  appName: z18.string().trim().min(2, "Nama aplikasi minimal 2 karakter.").max(60).optional(),
+  pwaAppName: z18.string().trim().min(2, "Nama aplikasi PWA minimal 2 karakter.").max(25, "Nama aplikasi PWA maksimal 25 karakter.").optional(),
+  schoolName: z18.string().trim().min(3, "Nama sekolah minimal 3 karakter.").max(140).optional(),
+  schoolAddress: z18.string().trim().min(5, "Alamat sekolah minimal 5 karakter.").max(300).optional(),
+  schoolBio: z18.string().trim().max(500).optional(),
+  timezone: z18.string().trim().min(3).max(60).optional(),
+  theme: z18.object({
     primary: hexColorSchema,
     accent: hexColorSchema,
     background: hexColorSchema
   }).optional(),
-  gpsEnabledForStudents: z17.boolean().optional(),
-  gpsEnabledForTeachers: z17.boolean().optional(),
-  teacherSelfServiceEnabled: z17.boolean().optional(),
-  portalScanMethod: z17.enum(PORTAL_SCAN_METHODS).optional(),
-  approvedPermissionAffectsRecap: z17.boolean().optional(),
-  quickLoginEnabled: z17.boolean().optional(),
-  bypassAttendanceTimeWindow: z17.boolean().optional(),
-  requireUserLinkedToTeacher: z17.boolean().optional(),
-  photoRetentionDays: z17.coerce.number().int().min(7, "Retensi foto minimal 7 hari.").max(730, "Retensi foto maksimal 730 hari.").optional(),
-  voiceTemplates: z17.object({
-    success: z17.string().trim().min(2).max(120),
-    failure: z17.string().trim().min(2).max(120),
-    namedSuccess: z17.string().trim().min(2).max(160),
-    late: z17.string().trim().min(2).max(160).optional(),
-    closed: z17.string().trim().min(2).max(160).optional(),
-    alreadyRecorded: z17.string().trim().min(2).max(160).optional()
+  gpsEnabledForStudents: z18.boolean().optional(),
+  gpsEnabledForTeachers: z18.boolean().optional(),
+  teacherSelfServiceEnabled: z18.boolean().optional(),
+  portalScanMethod: z18.enum(PORTAL_SCAN_METHODS).optional(),
+  approvedPermissionAffectsRecap: z18.boolean().optional(),
+  quickLoginEnabled: z18.boolean().optional(),
+  bypassAttendanceTimeWindow: z18.boolean().optional(),
+  requireUserLinkedToTeacher: z18.boolean().optional(),
+  photoRetentionDays: z18.coerce.number().int().min(7, "Retensi foto minimal 7 hari.").max(730, "Retensi foto maksimal 730 hari.").optional(),
+  voiceTemplates: z18.object({
+    success: z18.string().trim().min(2).max(120),
+    failure: z18.string().trim().min(2).max(120),
+    namedSuccess: z18.string().trim().min(2).max(160),
+    late: z18.string().trim().min(2).max(160).optional(),
+    closed: z18.string().trim().min(2).max(160).optional(),
+    alreadyRecorded: z18.string().trim().min(2).max(160).optional()
   }).optional(),
-  portalExitPassword: z17.string().min(3, "Kata sandi keluar portal minimal 3 karakter.").max(72).optional()
+  portalExitPassword: z18.string().min(3, "Kata sandi keluar portal minimal 3 karakter.").max(72).optional()
 });
-var brandingUploadSchema = z17.object({
-  slot: z17.enum(BRANDING_SLOTS),
-  dataUrl: z17.string().min(30, "Data gambar branding tidak valid."),
-  mimeType: z17.enum(ALLOWED_BRANDING_MIME_TYPES, {
+var brandingUploadSchema = z18.object({
+  slot: z18.enum(BRANDING_SLOTS),
+  dataUrl: z18.string().min(30, "Data gambar branding tidak valid."),
+  mimeType: z18.enum(ALLOWED_BRANDING_MIME_TYPES, {
     message: "Format aset branding hanya mendukung PNG, JPEG, atau WebP."
   }),
-  fileName: z17.string().trim().max(160).optional()
+  fileName: z18.string().trim().max(160).optional()
 });
-var qrBulkIssueSchema = z17.object({
-  ownerType: z17.enum(["STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]),
-  ownerIds: z17.array(z17.string().trim().min(1)).min(1, "Pilih minimal 1 siswa atau guru.").max(100, "Maksimal 100 kartu QR per permintaan massal.")
+var qrBulkIssueSchema = z18.object({
+  ownerType: z18.enum(["STUDENT" /* STUDENT */, "TEACHER" /* TEACHER */]),
+  ownerIds: z18.array(z18.string().trim().min(1)).min(1, "Pilih minimal 1 siswa atau guru.").max(100, "Maksimal 100 kartu QR per permintaan massal.")
 });
-var userCreateSchema = z17.object({
-  username: z17.string().trim().min(3, "Username minimal 3 karakter.").max(40, "Username maksimal 40 karakter.").regex(/^[a-zA-Z0-9._-]+$/, "Username hanya boleh huruf, angka, titik, garis bawah, atau strip."),
-  password: z17.string().min(6, "Kata sandi minimal 6 karakter.").max(72, "Kata sandi maksimal 72 karakter."),
-  role: z17.enum([
+var userCreateSchema = z18.object({
+  username: z18.string().trim().min(3, "Username minimal 3 karakter.").max(40, "Username maksimal 40 karakter.").regex(/^[a-zA-Z0-9._-]+$/, "Username hanya boleh huruf, angka, titik, garis bawah, atau strip."),
+  password: z18.string().min(6, "Kata sandi minimal 6 karakter.").max(72, "Kata sandi maksimal 72 karakter."),
+  role: z18.enum([
     "SUPER_ADMIN" /* SUPER_ADMIN */,
     "ADMIN" /* ADMIN */,
     "PRINCIPAL" /* PRINCIPAL */,
     "OPERATOR" /* OPERATOR */,
     "TEACHER" /* TEACHER */
   ]),
-  linkedTeacherId: z17.string().trim().nullable().optional().default(null),
-  isActive: z17.boolean().optional().default(true),
-  mustChangePassword: z17.boolean().optional().default(false)
+  linkedTeacherId: z18.string().trim().nullable().optional().default(null),
+  isActive: z18.boolean().optional().default(true),
+  mustChangePassword: z18.boolean().optional().default(false)
 });
-var userUpdateSchema = z17.object({
-  username: z17.string().trim().min(3, "Username minimal 3 karakter.").max(40, "Username maksimal 40 karakter.").regex(/^[a-zA-Z0-9._-]+$/, "Username hanya boleh huruf, angka, titik, garis bawah, atau strip.").optional(),
-  role: z17.enum([
+var userUpdateSchema = z18.object({
+  username: z18.string().trim().min(3, "Username minimal 3 karakter.").max(40, "Username maksimal 40 karakter.").regex(/^[a-zA-Z0-9._-]+$/, "Username hanya boleh huruf, angka, titik, garis bawah, atau strip.").optional(),
+  role: z18.enum([
     "SUPER_ADMIN" /* SUPER_ADMIN */,
     "ADMIN" /* ADMIN */,
     "PRINCIPAL" /* PRINCIPAL */,
     "OPERATOR" /* OPERATOR */,
     "TEACHER" /* TEACHER */
   ]).optional(),
-  isActive: z17.boolean().optional(),
-  linkedTeacherId: z17.string().trim().nullable().optional(),
-  mustChangePassword: z17.boolean().optional(),
-  password: z17.string().min(6, "Kata sandi baru minimal 6 karakter.").max(72, "Kata sandi baru maksimal 72 karakter.").optional()
+  isActive: z18.boolean().optional(),
+  linkedTeacherId: z18.string().trim().nullable().optional(),
+  mustChangePassword: z18.boolean().optional(),
+  password: z18.string().min(6, "Kata sandi baru minimal 6 karakter.").max(72, "Kata sandi baru maksimal 72 karakter.").optional()
 });
-var generateUsersFromTeachersSchema = z17.object({
-  items: z17.array(
-    z17.object({
-      teacherId: z17.string().trim().min(1, "ID guru wajib diisi."),
-      role: z17.enum(["PRINCIPAL" /* PRINCIPAL */, "TEACHER" /* TEACHER */]).optional()
+var generateUsersFromTeachersSchema = z18.object({
+  items: z18.array(
+    z18.object({
+      teacherId: z18.string().trim().min(1, "ID guru wajib diisi."),
+      role: z18.enum(["PRINCIPAL" /* PRINCIPAL */, "TEACHER" /* TEACHER */]).optional(),
+      customUsername: z18.string().trim().min(3, "Username minimal 3 karakter.").max(30).optional().or(z18.literal("")),
+      customPassword: z18.string().min(6, "Kata sandi minimal 6 karakter.").optional().or(z18.literal(""))
     })
   ).min(1, "Pilih minimal 1 data guru untuk dibuatkan akun.").max(200, "Maksimal 200 guru per proses generate.")
 });
-var auditLogQuerySchema = z17.object({
-  actorUserId: z17.string().trim().optional(),
-  action: z17.string().trim().optional(),
-  entityType: z17.string().trim().optional(),
-  dateFrom: z17.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal awal harus YYYY-MM-DD.").optional(),
-  dateTo: z17.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal akhir harus YYYY-MM-DD.").optional(),
-  search: z17.string().trim().max(120).optional().default(""),
-  cursor: z17.string().trim().optional(),
-  limit: z17.coerce.number().int().min(1).max(2e3).optional().default(25)
+var auditLogQuerySchema = z18.object({
+  actorUserId: z18.string().trim().optional(),
+  action: z18.string().trim().optional(),
+  entityType: z18.string().trim().optional(),
+  dateFrom: z18.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal awal harus YYYY-MM-DD.").optional(),
+  dateTo: z18.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal akhir harus YYYY-MM-DD.").optional(),
+  search: z18.string().trim().max(120).optional().default(""),
+  cursor: z18.string().trim().optional(),
+  limit: z18.coerce.number().int().min(1).max(2e3).optional().default(25)
 });
 
 // backend/qr/bulk.ts
@@ -10170,7 +10629,7 @@ async function handler54(req, res) {
 }
 
 // backend/settings/branding.ts
-import crypto14 from "node:crypto";
+import crypto15 from "node:crypto";
 var BRANDING_WRITE_ROLES = ["SUPER_ADMIN" /* SUPER_ADMIN */, "ADMIN" /* ADMIN */];
 var MAX_FIRESTORE_INLINE_BRANDING_BYTES = 700 * 1024;
 function validateImageMagicBytes(buffer, mimeType) {
@@ -10218,7 +10677,7 @@ async function handleBrandingUpload(req, res, repo = getRepository()) {
       );
     }
     const ext = parsed.mimeType === "image/png" ? "png" : parsed.mimeType === "image/webp" ? "webp" : "jpg";
-    const fileId = `brand_${parsed.slot}_${crypto14.randomBytes(6).toString("hex")}`;
+    const fileId = `brand_${parsed.slot}_${crypto15.randomBytes(6).toString("hex")}`;
     const storagePath = `branding/${parsed.slot}/${fileId}.${ext}`;
     putPrivateBlob(storagePath, buffer, parsed.mimeType);
     await repo.collection("fileMetadata" /* FILE_METADATA */).create({
@@ -10442,29 +10901,29 @@ async function handler57(req, res) {
 }
 
 // backend/settings/restore.ts
-import { z as z18 } from "zod";
+import { z as z19 } from "zod";
 var RESTORE_ALLOWED_ROLES = ["SUPER_ADMIN" /* SUPER_ADMIN */, "ADMIN" /* ADMIN */];
-var restoreDocSchema = z18.object({
-  id: z18.string().trim().min(1)
+var restoreDocSchema = z19.object({
+  id: z19.string().trim().min(1)
 }).passthrough();
-var restorePayloadSchema = z18.object({
-  schemaVersion: z18.string().optional(),
-  exportedAt: z18.string().optional(),
-  collections: z18.object({
-    appSettings: z18.array(restoreDocSchema).optional(),
-    academicYears: z18.array(restoreDocSchema).optional(),
-    classes: z18.array(restoreDocSchema).optional(),
-    subjects: z18.array(restoreDocSchema).optional(),
-    students: z18.array(restoreDocSchema).optional(),
-    teachers: z18.array(restoreDocSchema).optional(),
-    studentEnrollments: z18.array(restoreDocSchema).optional(),
-    teachingSchedules: z18.array(restoreDocSchema).optional(),
-    attendanceRules: z18.array(restoreDocSchema).optional(),
-    schoolLocations: z18.array(restoreDocSchema).optional(),
-    holidays: z18.array(restoreDocSchema).optional(),
-    attendanceRecords: z18.array(restoreDocSchema).optional(),
-    teacherPermissions: z18.array(restoreDocSchema).optional(),
-    users: z18.array(restoreDocSchema).optional()
+var restorePayloadSchema = z19.object({
+  schemaVersion: z19.string().optional(),
+  exportedAt: z19.string().optional(),
+  collections: z19.object({
+    appSettings: z19.array(restoreDocSchema).optional(),
+    academicYears: z19.array(restoreDocSchema).optional(),
+    classes: z19.array(restoreDocSchema).optional(),
+    subjects: z19.array(restoreDocSchema).optional(),
+    students: z19.array(restoreDocSchema).optional(),
+    teachers: z19.array(restoreDocSchema).optional(),
+    studentEnrollments: z19.array(restoreDocSchema).optional(),
+    teachingSchedules: z19.array(restoreDocSchema).optional(),
+    attendanceRules: z19.array(restoreDocSchema).optional(),
+    schoolLocations: z19.array(restoreDocSchema).optional(),
+    holidays: z19.array(restoreDocSchema).optional(),
+    attendanceRecords: z19.array(restoreDocSchema).optional(),
+    teacherPermissions: z19.array(restoreDocSchema).optional(),
+    users: z19.array(restoreDocSchema).optional()
   })
 });
 async function runInChunks3(items, chunkSize, worker) {
@@ -10605,8 +11064,8 @@ async function handler58(req, res) {
 }
 
 // backend/settings/restore-points.ts
-import crypto15 from "node:crypto";
-import { z as z19 } from "zod";
+import crypto16 from "node:crypto";
+import { z as z20 } from "zod";
 var FACTORY_BASELINE_ID = "sys_factory_baseline";
 var RESTORE_POINT_VIEW_ROLES = [
   "SUPER_ADMIN" /* SUPER_ADMIN */,
@@ -10614,9 +11073,9 @@ var RESTORE_POINT_VIEW_ROLES = [
   "PRINCIPAL" /* PRINCIPAL */
 ];
 var RESTORE_POINT_WRITE_ROLES = ["SUPER_ADMIN" /* SUPER_ADMIN */, "ADMIN" /* ADMIN */];
-var createRestorePointSchema = z19.object({
-  name: z19.string().trim().min(3, "Nama Restore Point minimal 3 karakter.").max(100, "Nama Restore Point maksimal 100 karakter."),
-  note: z19.string().trim().max(250, "Catatan maksimal 250 karakter.").optional()
+var createRestorePointSchema = z20.object({
+  name: z20.string().trim().min(3, "Nama Restore Point minimal 3 karakter.").max(100, "Nama Restore Point maksimal 100 karakter."),
+  note: z20.string().trim().max(250, "Catatan maksimal 250 karakter.").optional()
 });
 function sanitizeRestorePointSummary(rp) {
   return {
@@ -10720,7 +11179,7 @@ async function handleRestorePoints(req, res, repo = getRepository()) {
       const auth = await requireAuth(req, { repo, allowedRoles: RESTORE_POINT_WRITE_ROLES });
       const parsed = createRestorePointSchema.parse(req.body ?? {});
       const { counts, snapshot } = await buildSanitizedSnapshot(repo);
-      const id = `rp_${crypto15.randomBytes(6).toString("hex")}`;
+      const id = `rp_${crypto16.randomBytes(6).toString("hex")}`;
       const created = await repo.collection("restorePoints" /* RESTORE_POINTS */).create({
         id,
         name: parsed.name,
@@ -10879,10 +11338,10 @@ async function handler59(req, res) {
 }
 
 // backend/settings/factory-reset.ts
-import { z as z20 } from "zod";
+import { z as z21 } from "zod";
 var FACTORY_RESET_ALLOWED_ROLES = ["SUPER_ADMIN" /* SUPER_ADMIN */, "ADMIN" /* ADMIN */];
-var factoryResetSchema = z20.object({
-  confirmationText: z20.string().trim()
+var factoryResetSchema = z21.object({
+  confirmationText: z21.string().trim()
 });
 async function runInChunks4(items, chunkSize, worker) {
   for (let i = 0; i < items.length; i += chunkSize) {
@@ -11287,7 +11746,7 @@ async function handler61(req, res) {
 }
 
 // backend/users/generate.ts
-import crypto16 from "node:crypto";
+import crypto17 from "node:crypto";
 var GENERATE_ALLOWED_ROLES = [
   "SUPER_ADMIN" /* SUPER_ADMIN */,
   "ADMIN" /* ADMIN */,
@@ -11346,40 +11805,54 @@ async function handleGenerateUsersFromTeachers(req, res, repo = getRepository())
           "Kepala Sekolah hanya dapat men-generate akun Guru, bukan akun Kepala Sekolah."
         );
       }
-      const base = buildFirstNameUsernameBase(teacher.fullName);
-      const availableUsername = await findAvailableUsername(repo, base);
-      const userId = `usr_${crypto16.randomBytes(6).toString("hex")}`;
-      const normalizedUsername = await reserveUniqueUsername(repo, availableUsername, userId);
-      const generatedPassword = `${normalizedUsername}123`;
-      const passwordHash = await hashPassword(generatedPassword);
-      const passwordCipher = encryptPasswordForAdminView(generatedPassword);
-      await userCol.create({
-        id: userId,
-        username: normalizedUsername,
-        normalizedUsername,
-        passwordHash,
-        passwordCipher,
-        role: targetRole,
-        linkedTeacherId: teacher.id,
-        isActive: true,
-        mustChangePassword: false,
-        lastLoginAt: null,
-        failedLoginCount: 0,
-        lockedUntil: null,
-        createdBy: auth.user.id
-      });
-      await teacherCol.update(teacher.id, { userId });
-      existingLinkedTeacherIds.add(teacher.id);
-      created.push({
-        userId,
-        teacherId: teacher.id,
-        fullName: teacher.fullName,
-        niyNip: teacher.niyNip,
-        position: teacher.position,
-        role: targetRole,
-        username: normalizedUsername,
-        generatedPassword
-      });
+      try {
+        const userId = `usr_${crypto17.randomBytes(6).toString("hex")}`;
+        let normalizedUsername;
+        if (item.customUsername && item.customUsername.trim().length >= 3) {
+          const cleanedCustom = item.customUsername.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+          normalizedUsername = await reserveUniqueUsername(repo, cleanedCustom, userId);
+        } else {
+          const base = buildFirstNameUsernameBase(teacher.fullName);
+          const availableUsername = await findAvailableUsername(repo, base);
+          normalizedUsername = await reserveUniqueUsername(repo, availableUsername, userId);
+        }
+        const generatedPassword = item.customPassword && item.customPassword.trim().length >= 6 ? item.customPassword.trim() : `${normalizedUsername}123`;
+        const passwordHash = await hashPassword(generatedPassword);
+        const passwordCipher = encryptPasswordForAdminView(generatedPassword);
+        await userCol.create({
+          id: userId,
+          username: normalizedUsername,
+          normalizedUsername,
+          passwordHash,
+          passwordCipher,
+          role: targetRole,
+          linkedTeacherId: teacher.id,
+          isActive: true,
+          mustChangePassword: false,
+          lastLoginAt: null,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          createdBy: auth.user.id
+        });
+        await teacherCol.update(teacher.id, { userId });
+        existingLinkedTeacherIds.add(teacher.id);
+        created.push({
+          userId,
+          teacherId: teacher.id,
+          fullName: teacher.fullName,
+          niyNip: teacher.niyNip,
+          position: teacher.position,
+          role: targetRole,
+          username: normalizedUsername,
+          generatedPassword
+        });
+      } catch (itemErr) {
+        skipped.push({
+          teacherId: teacher.id,
+          fullName: teacher.fullName,
+          reason: itemErr instanceof Error ? itemErr.message : "Gagal membuat akun."
+        });
+      }
     }
     if (created.length === 0) {
       throw ApiError.badRequest(
@@ -11980,6 +12453,7 @@ function createApiApp() {
   app2.all("/api/students/:id", (req, res) => void handleStudentById(req, res, req.params.id));
   app2.all("/api/teachers/me/schedule", (req, res) => void handler25(req, res));
   app2.all("/api/teachers/import", (req, res) => void handler22(req, res));
+  app2.all("/api/teachers/bulk-working-days", (req, res) => void handleTeachersBulkWorkingDays(req, res));
   app2.all("/api/teachers/bulk-archive", (req, res) => void handler23(req, res));
   app2.all("/api/teachers/bulk-delete", (req, res) => void handler24(req, res));
   app2.all("/api/teachers", (req, res) => void handler21(req, res));
@@ -11989,6 +12463,7 @@ function createApiApp() {
   app2.all("/api/schedules", (req, res) => void handler26(req, res));
   app2.all("/api/schedules/:id", (req, res) => void handleScheduleById(req, res, req.params.id));
   app2.all("/api/attendance-rules", (req, res) => void handler29(req, res));
+  app2.all("/api/holidays/import", (req, res) => void handleHolidaysImport(req, res));
   app2.all("/api/holidays", (req, res) => void handler30(req, res));
   app2.all("/api/holidays/:id", (req, res) => void handleHolidayById(req, res, req.params.id));
   app2.all("/api/qr/tokens", (req, res) => void handler31(req, res));

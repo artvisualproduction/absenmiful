@@ -464,6 +464,15 @@ export const masterDataService = {
       body: { ids, reason },
     });
   },
+  bulkUpdateTeacherWorkingDays(teacherIds: string[], workingDays: number[]) {
+    return apiRequest<{ success: boolean; updatedCount: number; workingDays: number[] }>(
+      '/api/teachers/bulk-working-days',
+      {
+        method: 'POST',
+        body: { teacherIds, workingDays },
+      },
+    );
+  },
   previewTeachersImport(rows: TeacherImportRowInput[]) {
     return apiRequest<TeacherImportPreviewResponse>('/api/teachers/import', {
       method: 'POST',

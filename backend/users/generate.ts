@@ -110,44 +110,62 @@ export async function handleGenerateUsersFromTeachers(
         );
       }
 
-      const base = buildFirstNameUsernameBase(teacher.fullName);
-      const availableUsername = await findAvailableUsername(repo, base);
-      const userId = `usr_${crypto.randomBytes(6).toString('hex')}`;
-      const normalizedUsername = await reserveUniqueUsername(repo, availableUsername, userId);
+      try {
+        const userId = `usr_${crypto.randomBytes(6).toString('hex')}`;
+        let normalizedUsername: string;
 
-      const generatedPassword = `${normalizedUsername}123`;
-      const passwordHash = await hashPassword(generatedPassword);
-      const passwordCipher = encryptPasswordForAdminView(generatedPassword);
+        if (item.customUsername && item.customUsername.trim().length >= 3) {
+          const cleanedCustom = item.customUsername.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+          normalizedUsername = await reserveUniqueUsername(repo, cleanedCustom, userId);
+        } else {
+          const base = buildFirstNameUsernameBase(teacher.fullName);
+          const availableUsername = await findAvailableUsername(repo, base);
+          normalizedUsername = await reserveUniqueUsername(repo, availableUsername, userId);
+        }
 
-      await userCol.create({
-        id: userId,
-        username: normalizedUsername,
-        normalizedUsername,
-        passwordHash,
-        passwordCipher,
-        role: targetRole,
-        linkedTeacherId: teacher.id,
-        isActive: true,
-        mustChangePassword: false,
-        lastLoginAt: null,
-        failedLoginCount: 0,
-        lockedUntil: null,
-        createdBy: auth.user.id,
-      });
+        const generatedPassword =
+          item.customPassword && item.customPassword.trim().length >= 6
+            ? item.customPassword.trim()
+            : `${normalizedUsername}123`;
+        const passwordHash = await hashPassword(generatedPassword);
+        const passwordCipher = encryptPasswordForAdminView(generatedPassword);
 
-      await teacherCol.update(teacher.id, { userId });
-      existingLinkedTeacherIds.add(teacher.id);
+        await userCol.create({
+          id: userId,
+          username: normalizedUsername,
+          normalizedUsername,
+          passwordHash,
+          passwordCipher,
+          role: targetRole,
+          linkedTeacherId: teacher.id,
+          isActive: true,
+          mustChangePassword: false,
+          lastLoginAt: null,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          createdBy: auth.user.id,
+        });
 
-      created.push({
-        userId,
-        teacherId: teacher.id,
-        fullName: teacher.fullName,
-        niyNip: teacher.niyNip,
-        position: teacher.position,
-        role: targetRole,
-        username: normalizedUsername,
-        generatedPassword,
-      });
+        await teacherCol.update(teacher.id, { userId });
+        existingLinkedTeacherIds.add(teacher.id);
+
+        created.push({
+          userId,
+          teacherId: teacher.id,
+          fullName: teacher.fullName,
+          niyNip: teacher.niyNip,
+          position: teacher.position,
+          role: targetRole,
+          username: normalizedUsername,
+          generatedPassword,
+        });
+      } catch (itemErr) {
+        skipped.push({
+          teacherId: teacher.id,
+          fullName: teacher.fullName,
+          reason: itemErr instanceof Error ? itemErr.message : 'Gagal membuat akun.',
+        });
+      }
     }
 
     if (created.length === 0) {

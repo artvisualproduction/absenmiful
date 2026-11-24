@@ -28,6 +28,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { cn } from '../../lib/cn';
 import { formatDateTimeJakarta, getDateKeyJakarta } from '../../lib/date';
+import { formatClassName } from '../../lib/formatters';
 import { exportRowsToExcel } from '../../lib/excel';
 import {
   downloadReportPdf,
@@ -367,7 +368,7 @@ export function ReportsPage({
     {
       key: 'className',
       header: 'Kelas',
-      render: (row) => <span className="font-semibold text-[#10264D]">Kelas {row.className}</span>,
+      render: (row) => <span className="font-semibold text-[#10264D]">{formatClassName(row.className)}</span>,
     },
     {
       key: 'totalStudents',
@@ -593,7 +594,7 @@ export function ReportsPage({
                     onChange={(e) => setClassId(e.target.value)}
                     options={[
                       { value: '', label: 'Semua Kelas' },
-                      ...classes.map((c) => ({ value: c.id, label: `Kelas ${c.name}` })),
+                      ...classes.map((c) => ({ value: c.id, label: formatClassName(c.name) })),
                     ]}
                   />
                 )}
@@ -809,7 +810,7 @@ export function ReportsPage({
                     onChange={(e) => setClassId(e.target.value)}
                     options={[
                       { value: '', label: 'Semua Kelas' },
-                      ...classes.map((c) => ({ value: c.id, label: `Kelas ${c.name}` })),
+                      ...classes.map((c) => ({ value: c.id, label: formatClassName(c.name) })),
                     ]}
                   />
                 )}

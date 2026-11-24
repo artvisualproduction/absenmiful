@@ -266,7 +266,12 @@ export const adminService = {
   },
 
   generateUsersFromTeachers(
-    items: Array<{ teacherId: string; role?: UserRole.PRINCIPAL | UserRole.TEACHER }>,
+    items: Array<{
+      teacherId: string;
+      role?: UserRole.PRINCIPAL | UserRole.TEACHER;
+      customUsername?: string;
+      customPassword?: string;
+    }>,
   ) {
     return apiRequest<{
       created: Array<{

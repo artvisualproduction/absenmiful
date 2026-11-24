@@ -5,12 +5,15 @@ import {
   CalendarCheck2,
   CalendarOff,
   Check,
+  ChevronDown,
+  ChevronUp,
   Clock,
   GraduationCap,
   Pencil,
   Plus,
   Search,
   SlidersHorizontal,
+  Upload,
   Users,
 } from 'lucide-react';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -53,6 +56,8 @@ import {
   type AttendanceRule,
   type Holiday,
 } from '../../types';
+import { TeacherScheduleGroupModal } from './TeacherScheduleGroupModal';
+import { HolidayImportModal } from './HolidayImportModal';
 
 const HOLIDAY_SCOPE_LABELS: Record<HolidayScope, string> = {
   [HolidayScope.SCHOOL]: 'Seluruh Sekolah',
@@ -108,6 +113,7 @@ export function AttendanceRulesPage() {
   const [teachers, setTeachers] = useState<EnrichedTeacher[]>([]);
   const [teacherDaysDraft, setTeacherDaysDraft] = useState<Record<string, number[]>>({});
   const [teacherSearch, setTeacherSearch] = useState('');
+  const [showIndividualTeachers, setShowIndividualTeachers] = useState(false);
   const [savingTeacherId, setSavingTeacherId] = useState<string | null>(null);
   const [allRules, setAllRules] = useState<AttendanceRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
@@ -138,6 +144,8 @@ export function AttendanceRulesPage() {
   const [holidaysLoading, setHolidaysLoading] = useState(true);
   const [holidaysError, setHolidaysError] = useState<string | null>(null);
   const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [teacherGroupModalOpen, setTeacherGroupModalOpen] = useState(false);
+  const [holidayImportModalOpen, setHolidayImportModalOpen] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
   const [holidayDate, setHolidayDate] = useState(getDateKeyJakarta());
   const [holidayName, setHolidayName] = useState('');
@@ -250,6 +258,27 @@ export function AttendanceRulesPage() {
         t.position.toLowerCase().includes(q),
     );
   }, [teachers, teacherSearch]);
+
+  const teacherScheduleSummary = useMemo(() => {
+    let fullCount = 0;
+    let hltCount = 0;
+    const schoolDaysCount = schoolActiveTeacherDays.length;
+
+    for (const t of teachers) {
+      const days = teacherDaysDraft[t.id] ?? resolveTeacherWorkingDays(t, activeTeacherRule);
+      if (days.length >= schoolDaysCount) {
+        fullCount++;
+      } else {
+        hltCount++;
+      }
+    }
+
+    return {
+      total: teachers.length,
+      fullCount,
+      hltCount,
+    };
+  }, [teachers, teacherDaysDraft, activeTeacherRule, schoolActiveTeacherDays]);
 
   const toggleTeacherWorkDay = (teacherId: string, dayVal: number) => {
     setTeacherDaysDraft((prev) => {
@@ -596,23 +625,43 @@ export function AttendanceRulesPage() {
         canEdit ? (
           <div className="flex flex-wrap items-center gap-2 [&>button]:whitespace-nowrap [&>button]:shrink-0">
             {activeTab === 'holidays' ? (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={openCreateHoliday}
-                leftIcon={<Plus className="h-4 w-4" />}
-              >
-                Tambah Hari Libur
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHolidayImportModalOpen(true)}
+                  leftIcon={<Upload className="h-4 w-4" />}
+                >
+                  Impor Excel Hari Libur
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={openCreateHoliday}
+                  leftIcon={<Plus className="h-4 w-4" />}
+                >
+                  Tambah Hari Libur
+                </Button>
+              </>
             ) : activeTab === 'teachers' ? (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => openEditRuleGroup(activeTeacherRule, AttendanceAudience.TEACHER)}
-                leftIcon={<SlidersHorizontal className="h-4 w-4" />}
-              >
-                Ubah Jam Guru
-              </Button>
+              <>
+                <Button
+                  variant="gold"
+                  size="sm"
+                  onClick={() => setTeacherGroupModalOpen(true)}
+                  leftIcon={<CalendarCheck2 className="h-4 w-4" />}
+                >
+                  Atur Jadwal Grup Guru
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openEditRuleGroup(activeTeacherRule, AttendanceAudience.TEACHER)}
+                  leftIcon={<SlidersHorizontal className="h-4 w-4" />}
+                >
+                  Ubah Jam Guru
+                </Button>
+              </>
             ) : (
               <Button
                 variant="primary"
@@ -960,158 +1009,251 @@ export function AttendanceRulesPage() {
                   )}
                 </section>
 
-                {/* Pengaturan Hari Masuk Wajib Per Guru & HLT */}
+                {/* Pengaturan Hari Masuk Wajib Guru (Diringkas) */}
                 <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 space-y-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b border-[#F1F5F9] pb-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#F1F5F9] pb-4">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <CalendarCheck2 className="h-4 w-4 text-[#10264D]" />
+                        <CalendarCheck2 className="h-5 w-5 text-[#10264D]" />
                         <h2 className="text-base font-bold text-[#10264D]">
-                          Hari Masuk Wajib Per Guru &amp; Ketentuan HLT
+                          Hari Masuk Wajib Guru &amp; Ketentuan HLT
                         </h2>
                         <span className="inline-flex items-center rounded-md border border-[#99F6E4] bg-[#F0FDFA] px-2 py-0.5 text-[11px] font-semibold text-[#0F766E]">
                           HLT = Hari Libur Tertentu
                         </span>
                       </div>
                       <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
-                        Tetapkan hari wajib masuk absensi untuk masing-masing guru dan kepala sekolah.
-                        Jika seorang guru hanya masuk 5 hari dalam seminggu, hari kerja sekolah di luar
-                        hari masuk guru tersebut otomatis dihitung sebagai{' '}
-                        <strong className="text-[#0F766E]">HLT (Hari Libur Tertentu)</strong> dan tidak
-                        terhitung Alfa pada rekap laporan.
+                        Kelola hari wajib masuk absensi dan hari libur tertentu (HLT) untuk guru. Guru yang libur pada hari aktif sekolah tidak terhitung Alfa pada rekap kehadiran.
                       </p>
                     </div>
-                    <div className="w-full sm:w-64 shrink-0">
-                      <Input
-                        aria-label="Cari guru"
-                        placeholder="Cari nama guru / jabatan..."
-                        value={teacherSearch}
-                        onChange={(e) => setTeacherSearch(e.target.value)}
-                        leftAddon={<Search className="h-3.5 w-3.5" />}
-                      />
+
+                    {canEdit && (
+                      <Button
+                        variant="gold"
+                        size="md"
+                        onClick={() => setTeacherGroupModalOpen(true)}
+                        leftIcon={<CalendarCheck2 className="h-4 w-4" />}
+                        className="shrink-0 font-semibold shadow-sm"
+                      >
+                        Atur Jadwal Grup Guru
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Ringkasan Status Jadwal Guru */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-600">Total Guru Aktif</span>
+                        <Users className="h-4 w-4 text-[#10264D]" />
+                      </div>
+                      <p className="text-xl font-bold text-[#10264D]">
+                        {teacherScheduleSummary.total}{' '}
+                        <span className="text-xs font-normal text-slate-500">orang</span>
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-600">
+                          Jadwal Penuh ({schoolActiveTeacherDays.length} Hari)
+                        </span>
+                        <Check className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <p className="text-xl font-bold text-emerald-700">
+                        {teacherScheduleSummary.fullCount}{' '}
+                        <span className="text-xs font-normal text-slate-500">orang</span>
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-[#99F6E4] bg-[#F0FDFA] p-3.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-[#0F766E]">
+                          Dengan Hari Libur Tertentu (HLT)
+                        </span>
+                        <span className="text-[10px] font-bold uppercase rounded bg-[#CCFBF1] text-[#0F766E] px-1.5 py-0.5">
+                          HLT
+                        </span>
+                      </div>
+                      <p className="text-xl font-bold text-[#0F766E]">
+                        {teacherScheduleSummary.hltCount}{' '}
+                        <span className="text-xs font-normal text-teal-600">orang</span>
+                      </p>
                     </div>
                   </div>
 
-                  {filteredTeachers.length === 0 ? (
-                    <p className="py-6 text-center text-xs text-slate-500">
-                      Tidak ada data guru aktif yang sesuai pencarian.
-                    </p>
-                  ) : (
-                    <div className="divide-y divide-[#F1F5F9]">
-                      {filteredTeachers.map((teacher) => {
-                        const savedDays = resolveTeacherWorkingDays(teacher, activeTeacherRule);
-                        const draftDays = teacherDaysDraft[teacher.id] ?? savedDays;
-                        const hltDays = resolveTeacherHltDays(draftDays, activeTeacherRule);
-                        const isDirty = draftDays.join(',') !== savedDays.join(',');
-                        const isSavingThis = savingTeacherId === teacher.id;
+                  {/* Accordion / Toggle Rincian Perorangan Guru */}
+                  <div className="border-t border-[#F1F5F9] pt-2 space-y-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowIndividualTeachers((prev) => !prev)}
+                      className="flex w-full items-center justify-between rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-left transition hover:bg-[#F1F5F9] cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-white p-1.5 shadow-xs border border-[#E2E8F0]">
+                          <Users className="h-4 w-4 text-[#10264D]" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-[#10264D]">
+                            Rincian &amp; Penyesuaian Perorangan Guru
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {showIndividualTeachers
+                              ? 'Klik untuk menyembunyikan daftar guru perorangan'
+                              : 'Sudah ada fitur grup. Buka ini hanya jika ingin melihat atau menyesuaikan jadwal guru satu per satu.'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[#10264D] shrink-0">
+                        <span>{showIndividualTeachers ? 'Sembunyikan' : 'Buka Rincian'}</span>
+                        {showIndividualTeachers ? (
+                          <ChevronUp className="h-4 w-4 text-slate-500" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-slate-500" />
+                        )}
+                      </div>
+                    </button>
 
-                        return (
-                          <div
-                            key={teacher.id}
-                            className="py-4 first:pt-0 last:pb-0 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
-                          >
-                            <div className="space-y-1 min-w-0 lg:w-64 shrink-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-semibold text-sm text-[#10264D] truncate">
-                                  {teacher.fullName}
-                                </p>
-                              </div>
-                              <p className="font-mono text-[11px] text-slate-500">
-                                {teacher.niyNip} · {teacher.position}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[11px]">
-                                <span className="font-semibold text-[#10264D]">
-                                  Masuk: {draftDays.length} hari
-                                </span>
-                                <span className="text-slate-300">·</span>
-                                {hltDays.length > 0 ? (
-                                  <span className="font-semibold text-[#0F766E]">
-                                    HLT: {formatIndonesianDaysList(hltDays)}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-500">Tanpa HLT (penuh)</span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:justify-end flex-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {DAY_OF_WEEK_OPTIONS.map((d) => {
-                                  const selected = draftDays.includes(d.value);
-                                  const isSchoolActive = schoolActiveTeacherDays.includes(d.value);
-                                  const isHltDay = !selected && isSchoolActive;
-                                  return (
-                                    <button
-                                      key={d.value}
-                                      type="button"
-                                      disabled={!canEdit || isSavingThis}
-                                      onClick={() => toggleTeacherWorkDay(teacher.id, d.value)}
-                                      title={
-                                        selected
-                                          ? `${d.label}: Hari wajib absen`
-                                          : isHltDay
-                                            ? `${d.label}: Dihitung HLT (Hari Libur Tertentu)`
-                                            : `${d.label}: Libur sekolah`
-                                      }
-                                      className={cn(
-                                        'rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-all tabular-nums',
-                                        canEdit ? 'cursor-pointer' : 'cursor-default opacity-80',
-                                        selected
-                                          ? 'border-[#10264D] bg-[#10264D] text-white'
-                                          : isHltDay
-                                            ? 'border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E] hover:border-[#0F766E]'
-                                            : 'border-[#E2E8F0] bg-[#F8FAFC] text-slate-400 hover:text-slate-600',
-                                      )}
-                                    >
-                                      {d.short}
-                                      {isHltDay && (
-                                        <span className="ml-1 text-[9px] font-bold uppercase opacity-90">
-                                          HLT
-                                        </span>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              {canEdit && (
-                                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                  <button
-                                    type="button"
-                                    disabled={isSavingThis}
-                                    onClick={() => applyTeacherPreset(teacher.id, [1, 2, 3, 4, 5])}
-                                    className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-[#10264D] hover:text-[#10264D] cursor-pointer"
-                                  >
-                                    5 Hari
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={isSavingThis}
-                                    onClick={() =>
-                                      applyTeacherPreset(teacher.id, schoolActiveTeacherDays)
-                                    }
-                                    className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-[#10264D] hover:text-[#10264D] cursor-pointer"
-                                  >
-                                    Penuh ({schoolActiveTeacherDays.length} Hari)
-                                  </button>
-                                  <Button
-                                    type="button"
-                                    variant={isDirty ? 'gold' : 'outline'}
-                                    size="sm"
-                                    loading={isSavingThis}
-                                    onClick={() => void handleSaveTeacherWorkingDays(teacher)}
-                                    leftIcon={<Check className="h-3.5 w-3.5" />}
-                                  >
-                                    {isDirty ? 'Simpan' : 'Tersimpan'}
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
+                    {showIndividualTeachers && (
+                      <div className="space-y-4 pt-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-xs text-slate-600">
+                            Menampilkan <strong>{filteredTeachers.length}</strong> guru aktif:
+                          </p>
+                          <div className="w-full sm:w-64">
+                            <Input
+                              aria-label="Cari guru"
+                              placeholder="Cari nama / NIP / jabatan..."
+                              value={teacherSearch}
+                              onChange={(e) => setTeacherSearch(e.target.value)}
+                              leftAddon={<Search className="h-3.5 w-3.5" />}
+                            />
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        </div>
+
+                        {filteredTeachers.length === 0 ? (
+                          <p className="py-6 text-center text-xs text-slate-500">
+                            Tidak ada data guru aktif yang sesuai pencarian.
+                          </p>
+                        ) : (
+                          <div className="divide-y divide-[#F1F5F9]">
+                            {filteredTeachers.map((teacher) => {
+                              const savedDays = resolveTeacherWorkingDays(teacher, activeTeacherRule);
+                              const draftDays = teacherDaysDraft[teacher.id] ?? savedDays;
+                              const hltDays = resolveTeacherHltDays(draftDays, activeTeacherRule);
+                              const isDirty = draftDays.join(',') !== savedDays.join(',');
+                              const isSavingThis = savingTeacherId === teacher.id;
+
+                              return (
+                                <div
+                                  key={teacher.id}
+                                  className="py-4 first:pt-0 last:pb-0 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+                                >
+                                  <div className="space-y-1 min-w-0 lg:w-64 shrink-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-semibold text-sm text-[#10264D] truncate">
+                                        {teacher.fullName}
+                                      </p>
+                                    </div>
+                                    <p className="font-mono text-[11px] text-slate-500">
+                                      {teacher.niyNip} · {teacher.position}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[11px]">
+                                      <span className="font-semibold text-[#10264D]">
+                                        Masuk: {draftDays.length} hari
+                                      </span>
+                                      <span className="text-slate-300">·</span>
+                                      {hltDays.length > 0 ? (
+                                        <span className="font-semibold text-[#0F766E]">
+                                          HLT: {formatIndonesianDaysList(hltDays)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-500">Tanpa HLT (penuh)</span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:justify-end flex-1">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {DAY_OF_WEEK_OPTIONS.map((d) => {
+                                        const selected = draftDays.includes(d.value);
+                                        const isSchoolActive = schoolActiveTeacherDays.includes(d.value);
+                                        const isHltDay = !selected && isSchoolActive;
+                                        return (
+                                          <button
+                                            key={d.value}
+                                            type="button"
+                                            disabled={!canEdit || isSavingThis}
+                                            onClick={() => toggleTeacherWorkDay(teacher.id, d.value)}
+                                            title={
+                                              selected
+                                                ? `${d.label}: Hari wajib absen`
+                                                : isHltDay
+                                                  ? `${d.label}: Dihitung HLT (Hari Libur Tertentu)`
+                                                  : `${d.label}: Libur sekolah`
+                                            }
+                                            className={cn(
+                                              'rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-all tabular-nums',
+                                              canEdit ? 'cursor-pointer' : 'cursor-default opacity-80',
+                                              selected
+                                                ? 'border-[#10264D] bg-[#10264D] text-white'
+                                                : isHltDay
+                                                  ? 'border-[#99F6E4] bg-[#F0FDFA] text-[#0F766E] hover:border-[#0F766E]'
+                                                  : 'border-[#E2E8F0] bg-[#F8FAFC] text-slate-400 hover:text-slate-600',
+                                            )}
+                                          >
+                                            {d.short}
+                                            {isHltDay && (
+                                              <span className="ml-1 text-[9px] font-bold uppercase opacity-90">
+                                                HLT
+                                              </span>
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+
+                                    {canEdit && (
+                                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                        <button
+                                          type="button"
+                                          disabled={isSavingThis}
+                                          onClick={() => applyTeacherPreset(teacher.id, [1, 2, 3, 4, 5])}
+                                          className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-[#10264D] hover:text-[#10264D] cursor-pointer"
+                                        >
+                                          5 Hari
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={isSavingThis}
+                                          onClick={() =>
+                                            applyTeacherPreset(teacher.id, schoolActiveTeacherDays)
+                                          }
+                                          className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-[#10264D] hover:text-[#10264D] cursor-pointer"
+                                        >
+                                          Penuh ({schoolActiveTeacherDays.length} Hari)
+                                        </button>
+                                        <Button
+                                          type="button"
+                                          variant={isDirty ? 'gold' : 'outline'}
+                                          size="sm"
+                                          loading={isSavingThis}
+                                          onClick={() => void handleSaveTeacherWorkingDays(teacher)}
+                                          leftIcon={<Check className="h-3.5 w-3.5" />}
+                                        >
+                                          {isDirty ? 'Simpan' : 'Tersimpan'}
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </section>
 
                 {teacherRulesAll.length > 1 && (
@@ -1483,6 +1625,22 @@ export function AttendanceRulesPage() {
         confirmLabel="Ya, Nonaktifkan"
         variant="danger"
         loading={archivingBusy}
+      />
+
+      {/* Teacher Schedule Group Modal */}
+      <TeacherScheduleGroupModal
+        open={teacherGroupModalOpen}
+        onClose={() => setTeacherGroupModalOpen(false)}
+        teachers={teachers}
+        activeTeacherRule={activeTeacherRule}
+        onApplied={() => void loadRulesAndClasses()}
+      />
+
+      {/* Holiday Excel Import Modal */}
+      <HolidayImportModal
+        open={holidayImportModalOpen}
+        onClose={() => setHolidayImportModalOpen(false)}
+        onImported={() => void loadHolidays()}
       />
     </AppShell>
   );

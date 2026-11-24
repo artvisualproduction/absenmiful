@@ -31,6 +31,7 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { ANOMALY_FLAG_LABELS } from '../../lib/attendanceAnomaly';
 import { attendanceCorrectionSchema } from '../../lib/attendanceScanValidation';
 import { formatDateShortJakarta, getDateKeyJakarta, getTimeHHMMJakarta } from '../../lib/date';
+import { formatClassName } from '../../lib/formatters';
 import { manualExceptionAttendanceSchema } from '../../lib/teacherAttendanceValidation';
 import { ApiClientError } from '../../services/apiClient';
 import {
@@ -329,7 +330,7 @@ export function AttendanceDataPage() {
             header: 'Kelas',
             render: (row: AttendanceRecord) => (
               <span className="inline-flex rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-0.5 text-xs font-semibold text-[#10264D]">
-                {row.classNameSnapshot ? `Kelas ${row.classNameSnapshot}` : '-'}
+                {row.classNameSnapshot ? formatClassName(row.classNameSnapshot) : '-'}
               </span>
             ),
           },
@@ -443,7 +444,7 @@ export function AttendanceDataPage() {
     },
   ];
 
-  const classOptions = classes.map((c) => ({ value: c.id, label: `Kelas ${c.name}` }));
+  const classOptions = classes.map((c) => ({ value: c.id, label: formatClassName(c.name) }));
   const exceptionPersonOptions =
     exPersonType === QrOwnerType.TEACHER
       ? teachers.map((t) => ({ value: t.id, label: `${t.fullName} (${t.niyNip})` }))

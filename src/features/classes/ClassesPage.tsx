@@ -14,6 +14,7 @@ import { mapStatusToBadge, StatusBadge } from '../../components/ui/StatusBadge';
 import { useToast } from '../../components/ui/Toast';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { formatClassName } from '../../lib/formatters';
 import { schoolClassCreateSchema } from '../../lib/masterDataValidation';
 import { ApiClientError } from '../../services/apiClient';
 import {
@@ -256,7 +257,7 @@ export function ClassesPage() {
     {
       key: 'name',
       header: 'Nama Kelas',
-      render: (row) => <span className="font-semibold text-[#10264D]">Kelas {row.name}</span>,
+      render: (row) => <span className="font-semibold text-[#10264D]">{formatClassName(row.name)}</span>,
     },
     {
       key: 'gradeLevel',

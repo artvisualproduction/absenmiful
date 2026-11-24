@@ -163,6 +163,8 @@ export function UsersPage() {
   const [generateRoleOverrides, setGenerateRoleOverrides] = useState<
     Record<string, UserRole.PRINCIPAL | UserRole.TEACHER>
   >({});
+  const [customUsernames, setCustomUsernames] = useState<Record<string, string>>({});
+  const [customPasswords, setCustomPasswords] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
   const [generateResult, setGenerateResult] = useState<Array<{
     userId: string;
@@ -340,6 +342,8 @@ export function UsersPage() {
   const openGenerateModal = () => {
     setGenerateResult(null);
     setGenerateSearch('');
+    setCustomUsernames({});
+    setCustomPasswords({});
     const autoIds = teachers
       .filter((t) => {
         const hasAccount = Boolean(linkedUserByTeacherId.get(t.id) || t.userId);
@@ -378,6 +382,28 @@ export function UsersPage() {
       return;
     }
 
+    for (const teacherId of selectedTeacherIds) {
+      const row = teacherGenerateRows.find((r) => r.teacher.id === teacherId);
+      const username = customUsernames[teacherId]?.trim() || row?.previewUsername || '';
+      const password = customPasswords[teacherId]?.trim() || row?.previewPassword || '';
+      if (username.length < 3) {
+        showToast({
+          variant: 'error',
+          title: 'Username terlalu pendek',
+          message: `Username untuk ${row?.teacher.fullName || teacherId} minimal 3 karakter.`,
+        });
+        return;
+      }
+      if (password.length < 6) {
+        showToast({
+          variant: 'error',
+          title: 'Kata sandi terlalu pendek',
+          message: `Kata sandi untuk ${row?.teacher.fullName || teacherId} minimal 6 karakter.`,
+        });
+        return;
+      }
+    }
+
     setGenerating(true);
     try {
       const items = selectedTeacherIds.map((teacherId) => {
@@ -385,6 +411,8 @@ export function UsersPage() {
         return {
           teacherId,
           role: row?.role,
+          customUsername: customUsernames[teacherId]?.trim() || row?.previewUsername,
+          customPassword: customPasswords[teacherId]?.trim() || row?.previewPassword,
         };
       });
       const res = await adminService.generateUsersFromTeachers(items);
@@ -1106,18 +1134,42 @@ export function UsersPage() {
                                 {row.existingAccount?.username ?? row.teacher.username ?? '—'}
                               </span>
                             ) : (
-                              <code className="rounded bg-[#F2F5FA] px-2 py-0.5 font-semibold text-[#10264D]">
-                                {row.previewUsername}
-                              </code>
+                              <input
+                                type="text"
+                                disabled={!row.eligible || generating}
+                                value={customUsernames[row.teacher.id] ?? row.previewUsername}
+                                onChange={(e) =>
+                                  setCustomUsernames((prev) => ({
+                                    ...prev,
+                                    [row.teacher.id]: e.target.value
+                                      .toLowerCase()
+                                      .replace(/[^a-z0-9_.-]/g, ''),
+                                  }))
+                                }
+                                placeholder={row.previewUsername}
+                                aria-label={`Username untuk ${row.teacher.fullName}`}
+                                className="w-28 rounded-md border border-[#CBD5E1] bg-white px-2 py-1 text-xs font-mono font-semibold text-[#10264D] focus:border-[#10264D] focus:outline-none"
+                              />
                             )}
                           </td>
                           <td className="px-3 py-2.5 font-mono">
                             {row.hasAccount ? (
                               <span className="text-slate-400">—</span>
                             ) : (
-                              <code className="rounded bg-[#FCF9F1] border border-[#E7D4A3]/70 px-2 py-0.5 font-semibold text-[#8D6B22]">
-                                {row.previewPassword}
-                              </code>
+                              <input
+                                type="text"
+                                disabled={!row.eligible || generating}
+                                value={customPasswords[row.teacher.id] ?? row.previewPassword}
+                                onChange={(e) =>
+                                  setCustomPasswords((prev) => ({
+                                    ...prev,
+                                    [row.teacher.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder={row.previewPassword}
+                                aria-label={`Kata sandi untuk ${row.teacher.fullName}`}
+                                className="w-32 rounded-md border border-[#E7D4A3] bg-[#FCF9F1] px-2 py-1 text-xs font-mono font-semibold text-[#8D6B22] focus:border-[#8D6B22] focus:outline-none"
+                              />
                             )}
                           </td>
                           <td className="px-3 py-2.5 text-right whitespace-nowrap">

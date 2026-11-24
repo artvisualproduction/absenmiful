@@ -24,6 +24,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { formatDateShortJakarta } from '../../lib/date';
+import { formatClassName } from '../../lib/formatters';
 import { exportRowsToExcel } from '../../lib/excel';
 import { studentCreateSchema } from '../../lib/masterDataValidation';
 import { ApiClientError } from '../../services/apiClient';
@@ -554,7 +555,7 @@ export function StudentsPage() {
               placeholder="Pilih kelas"
               options={classes.map((c) => ({
                 value: c.id,
-                label: `Kelas ${c.name} (${c.academicYearLabel})`,
+                label: `${formatClassName(c.name)} (${c.academicYearLabel})`,
               }))}
               required
             />
@@ -614,7 +615,7 @@ export function StudentsPage() {
             <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 text-xs space-y-1">
               <p className="font-semibold text-[#10264D] text-sm">{detailData.fullName}</p>
               <p className="font-mono text-slate-600">
-                NIS: {detailData.nis} · Kelas saat ini: {detailData.className}
+                NIS: {detailData.nis} · Kelas saat ini: {formatClassName(detailData.className)}
               </p>
             </div>
             <div className="divide-y divide-slate-100 rounded-lg border border-[#E2E8F0]">
@@ -630,7 +631,7 @@ export function StudentsPage() {
                   >
                     <div>
                       <p className="font-semibold text-[#10264D]">
-                        Kelas {enr.className} · TA {enr.academicYearLabel}
+                        {formatClassName(enr.className)} · TA {enr.academicYearLabel}
                       </p>
                       <p className="text-slate-500 tabular-nums">
                         Mulai {formatDateShortJakarta(enr.startDate)}

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'node:test';
 import { CSRF_COOKIE_NAME, SESSION_COOKIE_NAME } from '../backend/_lib/auth/cookies';
 import { hashPassword } from '../backend/_lib/auth/password';
 import { createUserSession } from '../backend/_lib/auth/session';

@@ -159,6 +159,18 @@ export const generateUsersFromTeachersSchema = z.object({
       z.object({
         teacherId: z.string().trim().min(1, 'ID guru wajib diisi.'),
         role: z.enum([UserRole.PRINCIPAL, UserRole.TEACHER]).optional(),
+        customUsername: z
+          .string()
+          .trim()
+          .min(3, 'Username minimal 3 karakter.')
+          .max(30)
+          .optional()
+          .or(z.literal('')),
+        customPassword: z
+          .string()
+          .min(6, 'Kata sandi minimal 6 karakter.')
+          .optional()
+          .or(z.literal('')),
       }),
     )
     .min(1, 'Pilih minimal 1 data guru untuk dibuatkan akun.')

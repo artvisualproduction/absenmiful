@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'node:test';
 import { bootstrapInitialAccounts } from '../backend/_lib/auth/bootstrapService';
 import { CSRF_COOKIE_NAME, CSRF_HEADER_NAME, SESSION_COOKIE_NAME } from '../backend/_lib/auth/cookies';
 import { resetAllIpRateLimits } from '../backend/_lib/auth/rateLimit';

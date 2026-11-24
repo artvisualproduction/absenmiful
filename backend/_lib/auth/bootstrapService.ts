@@ -48,6 +48,12 @@ export interface BootstrapPasswordsInput {
   adminPassword?: string;
   principalPassword?: string;
   portalExitPassword?: string;
+  /**
+   * Whether to auto-provision teacher user accounts during bootstrap.
+   * Defaults to false in production/preview so only `superadmin` exists,
+   * while allowing test suites to opt in when testing teacher account generation.
+   */
+  seedTeacherAccounts?: boolean;
 }
 
 export interface BootstrappedAccountSummary {
@@ -183,42 +189,45 @@ export async function bootstrapInitialAccounts(
     });
   }
 
-  // Create TEACHER accounts for all 7 teachers with random temporary passwords (never derived from NIP)
-  for (const teacher of teachersRes.items) {
-    const base = buildUsernameBaseFromName(teacher.fullName);
-    const availableUsername = await findAvailableUsername(repo, base);
-    const userId = `usr_${crypto.randomBytes(6).toString('hex')}`;
-    const normalizedUsername = await reserveUniqueUsername(repo, availableUsername, userId);
-    const temporaryPassword = generateTemporaryPassword(12);
-    const passwordHash = await hashPassword(temporaryPassword);
+  // Create TEACHER accounts with random temporary passwords (when enabled)
+  const shouldSeedTeachers = passwords.seedTeacherAccounts ?? true;
+  if (shouldSeedTeachers) {
+    for (const teacher of teachersRes.items) {
+      const base = buildUsernameBaseFromName(teacher.fullName);
+      const availableUsername = await findAvailableUsername(repo, base);
+      const userId = `usr_${crypto.randomBytes(6).toString('hex')}`;
+      const normalizedUsername = await reserveUniqueUsername(repo, availableUsername, userId);
+      const temporaryPassword = generateTemporaryPassword(12);
+      const passwordHash = await hashPassword(temporaryPassword);
 
-    await usersCol.create({
-      id: userId,
-      username: normalizedUsername,
-      normalizedUsername,
-      passwordHash,
-      passwordCipher: encryptPasswordForAdminView(temporaryPassword),
-      role: UserRole.TEACHER,
-      linkedTeacherId: teacher.id,
-      isActive: true,
-      mustChangePassword: false,
-      lastLoginAt: null,
-      failedLoginCount: 0,
-      lockedUntil: null,
-    });
+      await usersCol.create({
+        id: userId,
+        username: normalizedUsername,
+        normalizedUsername,
+        passwordHash,
+        passwordCipher: encryptPasswordForAdminView(temporaryPassword),
+        role: UserRole.TEACHER,
+        linkedTeacherId: teacher.id,
+        isActive: true,
+        mustChangePassword: false,
+        lastLoginAt: null,
+        failedLoginCount: 0,
+        lockedUntil: null,
+      });
 
-    // Link userId back to teacher profile
-    await repo.collection(CollectionName.TEACHERS).update(teacher.id, { userId });
+      // Link userId back to teacher profile
+      await repo.collection(CollectionName.TEACHERS).update(teacher.id, { userId });
 
-    accounts.push({
-      userId,
-      username: normalizedUsername,
-      role: UserRole.TEACHER,
-      fullName: teacher.fullName,
-      linkedTeacherId: teacher.id,
-      mustChangePassword: false,
-      temporaryPassword,
-    });
+      accounts.push({
+        userId,
+        username: normalizedUsername,
+        role: UserRole.TEACHER,
+        fullName: teacher.fullName,
+        linkedTeacherId: teacher.id,
+        mustChangePassword: false,
+        temporaryPassword,
+      });
+    }
   }
 
   // Initialize appSettings/default if missing (e.g. fresh Cloud Firestore) or set portalExitPasswordHash if empty
@@ -266,7 +275,7 @@ export async function ensurePreviewAccountsInitialized(repo: IDataRepository): P
     usersCol.count(),
   ]);
 
-  const isRealMode = repo.mode === 'real';
+  const isRealMode = repo.mode === 'real' || repo.mode === 'mysql';
   const baselineSettings = isRealMode ? FACTORY_APP_SETTINGS : SEED_APP_SETTINGS[0];
   let resolvedSettings = existingSettings;
 
@@ -410,7 +419,9 @@ export async function ensurePreviewAccountsInitialized(repo: IDataRepository): P
     }
   }
 
-  // 3. Ensure initial login accounts exist when `users` collection is still empty
+  // 3. Ensure initial login accounts exist when `users` collection is still empty.
+  // In real/mysql mode: strictly create ONLY `superadmin` with zero demo accounts.
+  // In mock test mode: seed test role accounts so unit tests pass.
   if (usersCount > 0) return;
 
   await bootstrapInitialAccounts(
@@ -419,17 +430,19 @@ export async function ensurePreviewAccountsInitialized(repo: IDataRepository): P
       ? {
           superAdminPassword: process.env.PREVIEW_SUPERADMIN_PASSWORD || 'superadmin123',
           portalExitPassword: process.env.PORTAL_DEFAULT_EXIT_PASSWORD || '123',
+          seedTeacherAccounts: false,
         }
       : {
           superAdminPassword: process.env.PREVIEW_SUPERADMIN_PASSWORD || 'superadmin123',
           adminPassword: process.env.PREVIEW_ADMIN_PASSWORD || 'admin123',
           principalPassword: process.env.PREVIEW_PRINCIPAL_PASSWORD || 'kepsek123',
           portalExitPassword: process.env.PORTAL_DEFAULT_EXIT_PASSWORD || '123',
+          seedTeacherAccounts: true,
         },
     '127.0.0.1',
   );
 
-  // In mock preview/test mode with seeded teachers, also create the convenience `guru` account
+  // In mock test mode, also create convenience `guru` account for teacher test suites
   if (!isRealMode) {
     const teachersRes = await repo.collection(CollectionName.TEACHERS).list({
       sort: { field: 'id', direction: 'asc' },

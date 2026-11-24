@@ -196,3 +196,31 @@ export function downloadScheduleTemplate(): void {
     ['guru', 'jamMulai', 'jamSelesai'],
   );
 }
+
+export function downloadHolidayTemplate(): void {
+  exportRowsToExcel(
+    'template_impor_hari_libur.xlsx',
+    'Template Hari Libur',
+    [
+      {
+        tanggal: '2026-08-17',
+        namaHariLibur: 'Hari Kemerdekaan Republik Indonesia Ke-81',
+        cakupan: 'SEMUA',
+        statusAktif: 'YA',
+      },
+      {
+        tanggal: '2026-10-22',
+        namaHariLibur: 'Hari Santri Nasional',
+        cakupan: 'SEMUA',
+        statusAktif: 'YA',
+      },
+      {
+        tanggal: '2026-11-25',
+        namaHariLibur: 'Hari Guru Nasional',
+        cakupan: 'GURU',
+        statusAktif: 'YA',
+      },
+    ],
+    ['tanggal'],
+  );
+}
