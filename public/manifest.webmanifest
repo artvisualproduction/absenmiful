@@ -1,0 +1,36 @@
+{
+  "id": "/",
+  "name": "MiFUL — MI MIFTAHUL ULUM",
+  "short_name": "MiFUL",
+  "description": "Sistem informasi kehadiran siswa dan guru, jadwal mengajar, perizinan, geofencing, kartu QR, dan laporan MI MIFTAHUL ULUM.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait-primary",
+  "theme_color": "#10264D",
+  "background_color": "#F6F8FB",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

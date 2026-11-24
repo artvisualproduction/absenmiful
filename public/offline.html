@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#10264D" />
+    <title>Sedang Offline — Absensi Digital</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f6f8fb;
+        color: #10264d;
+        font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        padding: 24px;
+      }
+      .card {
+        max-width: 440px;
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-top: 4px solid #c69b3c;
+        border-radius: 16px;
+        padding: 28px;
+        box-shadow: 0 8px 24px rgba(16, 38, 77, 0.08);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 20px;
+        line-height: 1.3;
+      }
+      p {
+        margin: 0 0 18px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #475569;
+      }
+      .note {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 12px;
+        color: #92400e;
+        margin-bottom: 18px;
+      }
+      button {
+        width: 100%;
+        background: #10264d;
+        color: #ffffff;
+        border: none;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #0b1b38;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>Koneksi Internet Terputus</h1>
+      <p>
+        Aplikasi <strong>Absensi Digital — MI Miftahul Ulum Sumberwuluh</strong> memerlukan koneksi
+        jaringan aktif untuk memverifikasi sesi, waktu server, dan pencatatan kehadiran.
+      </p>
+      <div class="note">
+        Demi keamanan dan keakuratan waktu server, absensi QR, selfie guru, serta data pribadi tidak
+        pernah disimpan di cache offline.
+      </div>
+      <button type="button" onclick="window.location.reload()">Coba Hubungkan Ulang</button>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,174 @@
+{
+  "school": "MI Miftahul Ulum Sumberwuluh",
+  "warning": "SELURUH DATA SISWA DI FILE INI FIKTIF UNTUK DEMO.",
+  "records": [
+    {
+      "nis": "90000001",
+      "fullName": "AHMAD FAQIH",
+      "className": "1A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000002",
+      "fullName": "AISYAH ZAHRA",
+      "className": "1A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000003",
+      "fullName": "MUHAMMAD RIZKI",
+      "className": "1B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000004",
+      "fullName": "NADIA PUTRI",
+      "className": "1B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000005",
+      "fullName": "FAHRI RAMADHAN",
+      "className": "2A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000006",
+      "fullName": "SITI AULIA",
+      "className": "2A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000007",
+      "fullName": "RAFI ALFARIZI",
+      "className": "2B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000008",
+      "fullName": "NABILA SAFITRI",
+      "className": "2B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000009",
+      "fullName": "DIMAS PRATAMA",
+      "className": "3A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000010",
+      "fullName": "KHADIJAH HUMAIRA",
+      "className": "3A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000011",
+      "fullName": "RAIHAN AKBAR",
+      "className": "3B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000012",
+      "fullName": "ZAHRA NURFADILAH",
+      "className": "3B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000013",
+      "fullName": "M. ILHAM",
+      "className": "4A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000014",
+      "fullName": "AMIRA SALSABILA",
+      "className": "4A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000015",
+      "fullName": "FIKRI MAULANA",
+      "className": "5A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000016",
+      "fullName": "SALMA NADHIRA",
+      "className": "5A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000017",
+      "fullName": "ALIF FATHUR",
+      "className": "5B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000018",
+      "fullName": "NAZWA KHAIRUNNISA",
+      "className": "5B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000019",
+      "fullName": "DAFFA ARYA",
+      "className": "6A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000020",
+      "fullName": "HANA MAHARANI",
+      "className": "6A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000021",
+      "fullName": "FARHAN HIDAYAT",
+      "className": "6A",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000022",
+      "fullName": "SYIFA AZZAHRA",
+      "className": "6B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000023",
+      "fullName": "RIZAL MAULANA",
+      "className": "6B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    },
+    {
+      "nis": "90000024",
+      "fullName": "ALYA FITRIANI",
+      "className": "6B",
+      "status": "DEMO_ACTIVE",
+      "isDemo": true
+    }
+  ]
+}

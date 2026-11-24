@@ -1,0 +1,432 @@
+{
+  "entities": {
+    "PublicSettings": {
+      "title": "PublicSettings",
+      "description": "Public non-PII school branding and display settings readable on the login screen.",
+      "type": "object",
+      "properties": {
+        "appName": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "schoolAddress": { "type": "string" },
+        "schoolBio": { "type": "string" },
+        "logoPath": { "type": "string" },
+        "faviconPath": { "type": "string" },
+        "pwaIcon192Path": { "type": "string" },
+        "pwaIcon512Path": { "type": "string" },
+        "loginBackgroundPath": { "type": "string" },
+        "timezone": { "type": "string" },
+        "portalScanMethod": { "type": "string" },
+        "quickLoginEnabled": { "type": "boolean" },
+        "bypassAttendanceTimeWindow": { "type": "boolean" },
+        "gpsEnabledForStudents": { "type": "boolean" },
+        "gpsEnabledForTeachers": { "type": "boolean" },
+        "teacherSelfServiceEnabled": { "type": "boolean" },
+        "theme": { "type": "object" },
+        "voiceTemplates": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["appName", "schoolName"]
+    },
+    "PublicBrandingAsset": {
+      "title": "PublicBrandingAsset",
+      "description": "Public school branding asset binary (logo, favicon, login backdrop only; never selfies or private attachments).",
+      "type": "object",
+      "properties": {
+        "slot": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "sizeBytes": { "type": "number" },
+        "storagePath": { "type": "string" },
+        "dataBase64": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mimeType", "sizeBytes", "dataBase64"]
+    },
+    "AdminAccount": {
+      "title": "AdminAccount",
+      "description": "Authorized Firebase Auth UID granted admin access to the school attendance database.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Complete school operational settings including hashed portal exit password.",
+      "type": "object",
+      "properties": {
+        "appName": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "schoolAddress": { "type": "string" },
+        "schoolBio": { "type": "string" },
+        "logoPath": { "type": "string" },
+        "faviconPath": { "type": "string" },
+        "pwaIcon192Path": { "type": "string" },
+        "pwaIcon512Path": { "type": "string" },
+        "loginBackgroundPath": { "type": "string" },
+        "theme": { "type": "object" },
+        "timezone": { "type": "string" },
+        "gpsEnabledForStudents": { "type": "boolean" },
+        "gpsEnabledForTeachers": { "type": "boolean" },
+        "teacherSelfServiceEnabled": { "type": "boolean" },
+        "portalScanMethod": { "type": "string" },
+        "portalExitPasswordHash": { "type": "string" },
+        "voiceTemplates": { "type": "object" },
+        "photoRetentionDays": { "type": "number" },
+        "approvedPermissionAffectsRecap": { "type": "boolean" },
+        "quickLoginEnabled": { "type": "boolean" },
+        "bypassAttendanceTimeWindow": { "type": "boolean" }
+      },
+      "required": ["appName", "schoolName"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Operational school user account record.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "normalizedUsername": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "role": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "mustChangePassword": { "type": "boolean" },
+        "failedLoginCount": { "type": "number" }
+      },
+      "required": ["username", "normalizedUsername", "passwordHash", "role", "isActive"]
+    },
+    "UniqueUsername": {
+      "title": "UniqueUsername",
+      "description": "Uniqueness reservation index for normalized usernames.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "normalizedUsername": { "type": "string" }
+      },
+      "required": ["userId", "normalizedUsername"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student master data record.",
+      "type": "object",
+      "properties": {
+        "nis": { "type": "string" },
+        "fullName": { "type": "string" },
+        "classId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["nis", "fullName", "classId", "status"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "Teacher and staff master data record.",
+      "type": "object",
+      "properties": {
+        "niyNip": { "type": "string" },
+        "fullName": { "type": "string" },
+        "position": { "type": "string" },
+        "workingDays": { "type": "array", "items": { "type": "number" } },
+        "status": { "type": "string" }
+      },
+      "required": ["niyNip", "fullName", "position", "status"]
+    },
+    "SchoolClass": {
+      "title": "SchoolClass",
+      "description": "School class / rombel master record.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "gradeLevel": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "gradeLevel", "academicYearId", "isActive"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Academic subject master record.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "code", "isActive"]
+    },
+    "AcademicYear": {
+      "title": "AcademicYear",
+      "description": "Academic year period record.",
+      "type": "object",
+      "properties": {
+        "label": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["label", "startDate", "endDate", "isActive"]
+    },
+    "StudentEnrollment": {
+      "title": "StudentEnrollment",
+      "description": "Student-to-class enrollment history record.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "academicYearId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["studentId", "classId", "academicYearId", "status"]
+    },
+    "TeachingSchedule": {
+      "title": "TeachingSchedule",
+      "description": "Weekly teacher class schedule entry.",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "classId": { "type": "string" },
+        "dayOfWeek": { "type": "number" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["teacherId", "subjectId", "classId", "dayOfWeek", "startTime", "endTime", "isActive"]
+    },
+    "AttendanceRule": {
+      "title": "AttendanceRule",
+      "description": "Attendance check-in/check-out time window and geofence policy.",
+      "type": "object",
+      "properties": {
+        "audience": { "type": "string" },
+        "classIds": { "type": "array", "items": { "type": "string" } },
+        "daysOfWeek": { "type": "array", "items": { "type": "number" } },
+        "checkInStart": { "type": "string" },
+        "checkInDeadline": { "type": "string" },
+        "lateAfter": { "type": "string" },
+        "checkOutStart": { "type": "string" },
+        "checkOutDeadline": { "type": "string" },
+        "timezone": { "type": "string" },
+        "gpsRequired": { "type": "boolean" },
+        "geofenceRequired": { "type": "boolean" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["audience", "checkInStart", "checkInDeadline", "lateAfter", "checkOutStart", "checkOutDeadline", "isActive"]
+    },
+    "SchoolLocation": {
+      "title": "SchoolLocation",
+      "description": "School geofence coordinate point and allowed radius.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "radiusMeters": { "type": "number" },
+        "maxGpsAccuracyMeters": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "latitude", "longitude", "radiusMeters", "isActive"]
+    },
+    "QrToken": {
+      "title": "QrToken",
+      "description": "Hashed attendance QR token assigned to a student or teacher.",
+      "type": "object",
+      "properties": {
+        "tokenHash": { "type": "string" },
+        "ownerType": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["tokenHash", "ownerType", "ownerId", "isActive"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Recorded student or teacher attendance check-in/check-out event.",
+      "type": "object",
+      "properties": {
+        "personType": { "type": "string" },
+        "personId": { "type": "string" },
+        "personNameSnapshot": { "type": "string" },
+        "attendanceDate": { "type": "string" },
+        "eventType": { "type": "string" },
+        "status": { "type": "string" },
+        "method": { "type": "string" },
+        "idempotencyKey": { "type": "string" },
+        "corrected": { "type": "boolean" }
+      },
+      "required": ["personType", "personId", "personNameSnapshot", "attendanceDate", "eventType", "status", "method", "idempotencyKey"]
+    },
+    "TeacherPermission": {
+      "title": "TeacherPermission",
+      "description": "Teacher leave/permission request and approval workflow record.",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "teacherNameSnapshot": { "type": "string" },
+        "leaveType": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["teacherId", "teacherNameSnapshot", "leaveType", "reason", "status"]
+    },
+    "FileMetadata": {
+      "title": "FileMetadata",
+      "description": "Uploaded file metadata for branding, attendance selfies, and permission attachments.",
+      "type": "object",
+      "properties": {
+        "ownerType": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "category": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "sizeBytes": { "type": "number" }
+      },
+      "required": ["ownerType", "ownerId", "category", "storagePath", "mimeType", "sizeBytes"]
+    },
+    "UserSession": {
+      "title": "UserSession",
+      "description": "Hashed operational user session record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "sessionTokenHash": { "type": "string" }
+      },
+      "required": ["userId", "sessionTokenHash"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Audit log entry for security and administrative mutations.",
+      "type": "object",
+      "properties": {
+        "actorUserId": { "type": "string" },
+        "actorRole": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" }
+      },
+      "required": ["actorUserId", "actorRole", "action", "entityType", "entityId"]
+    },
+    "Holiday": {
+      "title": "Holiday",
+      "description": "School holiday calendar entry.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "name": { "type": "string" },
+        "scope": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["date", "name", "scope", "isActive"]
+    },
+    "RestorePoint": {
+      "title": "RestorePoint",
+      "description": "Database backup snapshot restore point for school administrative recovery.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "note": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "counts": { "type": "object" },
+        "snapshot": { "type": "object" }
+      },
+      "required": ["name", "createdByName", "counts", "snapshot"]
+    }
+  },
+  "firestore": {
+    "/publicSettings/{docId}": {
+      "schema": { "$ref": "#/entities/PublicSettings" },
+      "description": "Public non-PII school branding settings (docId = 'default')."
+    },
+    "/publicBrandingAssets/{assetId}": {
+      "schema": { "$ref": "#/entities/PublicBrandingAsset" },
+      "description": "Public branding image binaries (logo, favicon, login backdrop)."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminAccount" },
+      "description": "Authorized Firebase Auth admin accounts."
+    },
+    "/appSettings/{docId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Full school operational configuration."
+    },
+    "/users/{docId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Operational school user accounts."
+    },
+    "/uniqueUsernames/{docId}": {
+      "schema": { "$ref": "#/entities/UniqueUsername" },
+      "description": "Unique normalized username locks."
+    },
+    "/students/{docId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Student master directory."
+    },
+    "/teachers/{docId}": {
+      "schema": { "$ref": "#/entities/Teacher" },
+      "description": "Teacher and staff directory."
+    },
+    "/classes/{docId}": {
+      "schema": { "$ref": "#/entities/SchoolClass" },
+      "description": "School class / rombel records."
+    },
+    "/subjects/{docId}": {
+      "schema": { "$ref": "#/entities/Subject" },
+      "description": "Academic subject records."
+    },
+    "/academicYears/{docId}": {
+      "schema": { "$ref": "#/entities/AcademicYear" },
+      "description": "Academic year records."
+    },
+    "/studentEnrollments/{docId}": {
+      "schema": { "$ref": "#/entities/StudentEnrollment" },
+      "description": "Student class enrollment records."
+    },
+    "/teachingSchedules/{docId}": {
+      "schema": { "$ref": "#/entities/TeachingSchedule" },
+      "description": "Weekly teacher schedules."
+    },
+    "/attendanceRules/{docId}": {
+      "schema": { "$ref": "#/entities/AttendanceRule" },
+      "description": "Attendance time-window and geofence rules."
+    },
+    "/schoolLocations/{docId}": {
+      "schema": { "$ref": "#/entities/SchoolLocation" },
+      "description": "School geofence locations."
+    },
+    "/qrTokens/{docId}": {
+      "schema": { "$ref": "#/entities/QrToken" },
+      "description": "Hashed attendance QR tokens."
+    },
+    "/attendanceRecords/{docId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Student and teacher attendance logs."
+    },
+    "/teacherPermissions/{docId}": {
+      "schema": { "$ref": "#/entities/TeacherPermission" },
+      "description": "Teacher leave requests and approvals."
+    },
+    "/fileMetadata/{docId}": {
+      "schema": { "$ref": "#/entities/FileMetadata" },
+      "description": "Metadata for uploaded private and branding files."
+    },
+    "/userSessions/{docId}": {
+      "schema": { "$ref": "#/entities/UserSession" },
+      "description": "Hashed active operational user sessions."
+    },
+    "/activityLogs/{docId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Immutable administrative and security audit trail."
+    },
+    "/holidays/{docId}": {
+      "schema": { "$ref": "#/entities/Holiday" },
+      "description": "School holiday calendar."
+    },
+    "/restorePoints/{docId}": {
+      "schema": { "$ref": "#/entities/RestorePoint" },
+      "description": "Database backup snapshot restore points."
+    }
+  }
+}

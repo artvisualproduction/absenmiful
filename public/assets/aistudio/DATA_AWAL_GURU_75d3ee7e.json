@@ -1,0 +1,47 @@
+{
+  "school": "MI Miftahul Ulum Sumberwuluh",
+  "records": [
+    {
+      "nip": "20521133197001",
+      "fullName": "NUR ANIFATUL IZZA",
+      "position": "Guru",
+      "status": "ACTIVE"
+    },
+    {
+      "nip": "20521133196004",
+      "fullName": "ZULKARNAIN NUR HARDIANSYAH",
+      "position": "Guru",
+      "status": "ACTIVE"
+    },
+    {
+      "nip": "20521133197002",
+      "fullName": "ISTIQOMARIYAH",
+      "position": "Guru",
+      "status": "ACTIVE"
+    },
+    {
+      "nip": "20521133104001",
+      "fullName": "NUR ANISA",
+      "position": "Guru",
+      "status": "ACTIVE"
+    },
+    {
+      "nip": "20596237101001",
+      "fullName": "HANIA AINUN NAFISA",
+      "position": "Guru",
+      "status": "ACTIVE"
+    },
+    {
+      "nip": "20521133191001",
+      "fullName": "IMAM MUSTHOFA",
+      "position": "Kepala Sekolah",
+      "status": "ACTIVE"
+    },
+    {
+      "nip": "20521133193002",
+      "fullName": "MUHAMAD HASMINULLAH HASBULLAH",
+      "position": "Guru",
+      "status": "ACTIVE"
+    }
+  ]
+}

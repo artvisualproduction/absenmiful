@@ -1,0 +1,11 @@
+{
+  "name": "MiFUL Absensi Digital — MI Miftahul Ulum Sumberwuluh",
+  "description": "Sistem informasi kehadiran siswa dan guru, jadwal mengajar, perizinan, geofencing, kartu QR, dan laporan untuk MI Miftahul Ulum Sumberwuluh.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

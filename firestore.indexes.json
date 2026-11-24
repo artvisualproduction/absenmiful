@@ -1,0 +1,64 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "attendanceRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "attendanceDate", "order": "ASCENDING" },
+        { "fieldPath": "personType", "order": "ASCENDING" },
+        { "fieldPath": "classIdSnapshot", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "attendanceRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "attendanceDate", "order": "ASCENDING" },
+        { "fieldPath": "personType", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "attendanceRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "personId", "order": "ASCENDING" },
+        { "fieldPath": "attendanceDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "teachingSchedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teacherId", "order": "ASCENDING" },
+        { "fieldPath": "dayOfWeek", "order": "ASCENDING" },
+        { "fieldPath": "isActive", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "teacherPermissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "students",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "classId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activityLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "actorUserId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

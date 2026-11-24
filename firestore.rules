@@ -1,0 +1,579 @@
+rules_version = '2';
+
+// Absensi Sekolah — MI Miftahul Ulum Sumberwuluh
+// Direct Cloud Firestore mode (no Firebase Auth / no Firebase Admin SDK).
+// Every collection enforces strict document ID validation, key allowlists,
+// required fields, enum allowlists, and bounded payload sizes.
+// Default-deny catch-all blocks every unlisted path.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 160 && id.matches('^[a-zA-Z0-9_.\\-@:]+$');
+    }
+
+    function isStr(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isOptStr(data, field, maxLen) {
+      return !(field in data) || data[field] == null || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isOptBool(data, field) {
+      return !(field in data) || data[field] == null || data[field] is bool;
+    }
+
+    function isOptNum(data, field) {
+      return !(field in data) || data[field] == null || data[field] is number;
+    }
+
+    function isOptTime(data, field) {
+      return !(field in data) || data[field] == null || data[field] is timestamp || (data[field] is string && data[field].size() <= 64);
+    }
+
+    function isOptList(data, field, maxLen) {
+      return !(field in data) || data[field] == null || (data[field] is list && data[field].size() <= maxLen);
+    }
+
+    function isOptMap(data, field) {
+      return !(field in data) || data[field] == null || data[field] is map;
+    }
+
+    function hasValidBaseMeta(data) {
+      return isOptTime(data, 'createdAt')
+        && isOptTime(data, 'updatedAt')
+        && isOptStr(data, 'createdBy', 128);
+    }
+
+    function isValidPublicSettings(data) {
+      return data.keys().hasAll(['appName', 'schoolName'])
+        && data.keys().hasOnly([
+          'appName', 'pwaAppName', 'schoolName', 'schoolAddress', 'schoolBio',
+          'logoPath', 'faviconPath', 'pwaIcon192Path', 'pwaIcon512Path', 'loginBackgroundPath',
+          'theme', 'timezone', 'gpsEnabledForStudents', 'gpsEnabledForTeachers',
+          'teacherSelfServiceEnabled', 'portalScanMethod', 'voiceTemplates',
+          'photoRetentionDays', 'approvedPermissionAffectsRecap', 'quickLoginEnabled',
+          'bypassAttendanceTimeWindow', 'requireUserLinkedToTeacher', 'initialSeedCompleted',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.appName, 1, 160)
+        && isStr(data.schoolName, 1, 200)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidPublicBrandingAsset(data) {
+      return data.keys().hasAll(['mimeType', 'sizeBytes', 'dataBase64'])
+        && data.keys().hasOnly([
+          'slot', 'mimeType', 'sizeBytes', 'storagePath', 'dataBase64',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && data.mimeType in ['image/png', 'image/jpeg', 'image/webp']
+        && data.sizeBytes is number && data.sizeBytes >= 1 && data.sizeBytes <= 1048576
+        && isStr(data.dataBase64, 1, 1400000)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidAdminAccount(data) {
+      return data.keys().hasAll(['email', 'role'])
+        && data.keys().hasOnly(['email', 'displayName', 'role', 'createdAt', 'updatedAt', 'createdBy'])
+        && isStr(data.email, 3, 200)
+        && data.role in ['SUPER_ADMIN', 'ADMIN']
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidAppSettings(data) {
+      return data.keys().hasAll(['appName', 'schoolName'])
+        && data.keys().hasOnly([
+          'appName', 'pwaAppName', 'schoolName', 'schoolAddress', 'schoolBio',
+          'logoPath', 'faviconPath', 'pwaIcon192Path', 'pwaIcon512Path', 'loginBackgroundPath',
+          'theme', 'timezone', 'gpsEnabledForStudents', 'gpsEnabledForTeachers',
+          'teacherSelfServiceEnabled', 'portalScanMethod', 'portalExitPasswordHash',
+          'voiceTemplates', 'photoRetentionDays', 'approvedPermissionAffectsRecap',
+          'quickLoginEnabled', 'bypassAttendanceTimeWindow', 'requireUserLinkedToTeacher',
+          'initialSeedCompleted', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.appName, 1, 160)
+        && isStr(data.schoolName, 1, 200)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['username', 'normalizedUsername', 'passwordHash', 'role', 'isActive'])
+        && data.keys().hasOnly([
+          'username', 'normalizedUsername', 'passwordHash', 'passwordCipher', 'role',
+          'linkedTeacherId', 'isActive', 'mustChangePassword', 'lastLoginAt',
+          'failedLoginCount', 'lockedUntil', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.username, 2, 80)
+        && isStr(data.normalizedUsername, 2, 80)
+        && isStr(data.passwordHash, 10, 512)
+        && data.role in ['SUPER_ADMIN', 'ADMIN', 'PRINCIPAL', 'OPERATOR', 'TEACHER']
+        && data.isActive is bool
+        && isOptStr(data, 'passwordCipher', 1024)
+        && isOptStr(data, 'linkedTeacherId', 128)
+        && isOptBool(data, 'mustChangePassword')
+        && isOptTime(data, 'lastLoginAt')
+        && isOptNum(data, 'failedLoginCount')
+        && isOptTime(data, 'lockedUntil')
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidUniqueUsername(data) {
+      return data.keys().hasAll(['userId', 'normalizedUsername'])
+        && data.keys().hasOnly(['userId', 'normalizedUsername', 'createdAt', 'updatedAt', 'createdBy'])
+        && isStr(data.userId, 1, 128)
+        && isStr(data.normalizedUsername, 2, 80)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['nis', 'fullName', 'classId', 'status'])
+        && data.keys().hasOnly([
+          'nis', 'fullName', 'classId', 'photoPath', 'gender', 'status',
+          'qrTokenId', 'isDemo', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.nis, 1, 64)
+        && isStr(data.fullName, 1, 160)
+        && isStr(data.classId, 1, 128)
+        && data.status in ['ACTIVE', 'DEMO_ACTIVE', 'GRADUATED', 'TRANSFERRED', 'INACTIVE']
+        && isOptStr(data, 'photoPath', 500)
+        && isOptStr(data, 'qrTokenId', 128)
+        && isOptBool(data, 'isDemo')
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidTeacher(data) {
+      return data.keys().hasAll(['niyNip', 'fullName', 'position', 'status'])
+        && data.keys().hasOnly([
+          'niyNip', 'fullName', 'position', 'photoPath', 'userId', 'qrTokenId',
+          'workingDays', 'status', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.niyNip, 1, 64)
+        && isStr(data.fullName, 1, 160)
+        && isStr(data.position, 1, 120)
+        && data.status in ['ACTIVE', 'INACTIVE']
+        && isOptStr(data, 'photoPath', 500)
+        && isOptStr(data, 'userId', 128)
+        && isOptStr(data, 'qrTokenId', 128)
+        && isOptList(data, 'workingDays', 7)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidSchoolClass(data) {
+      return data.keys().hasAll(['name', 'gradeLevel', 'academicYearId', 'isActive'])
+        && data.keys().hasOnly([
+          'name', 'gradeLevel', 'homeroomTeacherId', 'academicYearId', 'capacity',
+          'isActive', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.name, 1, 80)
+        && isStr(data.gradeLevel, 1, 40)
+        && isStr(data.academicYearId, 1, 128)
+        && data.isActive is bool
+        && isOptStr(data, 'homeroomTeacherId', 128)
+        && isOptNum(data, 'capacity')
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidSubject(data) {
+      return data.keys().hasAll(['name', 'code', 'isActive'])
+        && data.keys().hasOnly([
+          'name', 'code', 'defaultToHomeroomTeacher', 'isActive',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.name, 1, 120)
+        && isStr(data.code, 1, 40)
+        && data.isActive is bool
+        && isOptBool(data, 'defaultToHomeroomTeacher')
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidAcademicYear(data) {
+      return data.keys().hasAll(['label', 'startDate', 'endDate', 'isActive'])
+        && data.keys().hasOnly([
+          'label', 'semester', 'startDate', 'endDate', 'isActive',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.label, 1, 80)
+        && isOptStr(data, 'semester', 40)
+        && data.isActive is bool
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidStudentEnrollment(data) {
+      return data.keys().hasAll(['studentId', 'classId', 'academicYearId', 'status'])
+        && data.keys().hasOnly([
+          'studentId', 'classId', 'academicYearId', 'startDate', 'endDate', 'status',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.studentId, 1, 128)
+        && isStr(data.classId, 1, 128)
+        && isStr(data.academicYearId, 1, 128)
+        && data.status in ['ACTIVE', 'COMPLETED', 'TRANSFERRED']
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidTeachingSchedule(data) {
+      return data.keys().hasAll(['teacherId', 'subjectId', 'classId', 'dayOfWeek', 'startTime', 'endTime', 'isActive'])
+        && data.keys().hasOnly([
+          'teacherId', 'subjectId', 'classId', 'dayOfWeek', 'startTime', 'endTime',
+          'room', 'effectiveFrom', 'effectiveUntil', 'isActive',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.teacherId, 1, 128)
+        && isStr(data.subjectId, 1, 128)
+        && isStr(data.classId, 1, 128)
+        && data.dayOfWeek is number && data.dayOfWeek >= 1 && data.dayOfWeek <= 7
+        && isStr(data.startTime, 4, 16)
+        && isStr(data.endTime, 4, 16)
+        && data.isActive is bool
+        && isOptStr(data, 'room', 80)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidAttendanceRule(data) {
+      return data.keys().hasAll([
+        'audience', 'checkInStart', 'checkInDeadline', 'lateAfter',
+        'checkOutStart', 'checkOutDeadline', 'isActive'
+      ])
+        && data.keys().hasOnly([
+          'name', 'version', 'audience', 'classIds', 'daysOfWeek',
+          'checkInStart', 'checkInDeadline', 'lateAfter', 'lateToleranceMinutes',
+          'checkOutStart', 'checkOutDeadline', 'timezone', 'gpsRequired',
+          'geofenceRequired', 'effectiveFrom', 'effectiveUntil', 'isActive',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && data.audience in ['STUDENT', 'TEACHER']
+        && isStr(data.checkInStart, 4, 16)
+        && isStr(data.checkInDeadline, 4, 16)
+        && isStr(data.lateAfter, 4, 16)
+        && isStr(data.checkOutStart, 4, 16)
+        && isStr(data.checkOutDeadline, 4, 16)
+        && data.isActive is bool
+        && isOptList(data, 'classIds', 100)
+        && isOptList(data, 'daysOfWeek', 7)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidSchoolLocation(data) {
+      return data.keys().hasAll(['name', 'latitude', 'longitude', 'radiusMeters', 'isActive'])
+        && data.keys().hasOnly([
+          'name', 'latitude', 'longitude', 'radiusMeters', 'maxGpsAccuracyMeters',
+          'isActive', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.name, 1, 160)
+        && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+        && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+        && data.radiusMeters is number && data.radiusMeters >= 1 && data.radiusMeters <= 50000
+        && data.isActive is bool
+        && isOptNum(data, 'maxGpsAccuracyMeters')
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidQrToken(data) {
+      return data.keys().hasAll(['tokenHash', 'ownerType', 'ownerId', 'isActive'])
+        && data.keys().hasOnly([
+          'tokenHash', 'ownerType', 'ownerId', 'isActive', 'issuedAt', 'revokedAt',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.tokenHash, 8, 256)
+        && data.ownerType in ['STUDENT', 'TEACHER']
+        && isStr(data.ownerId, 1, 128)
+        && data.isActive is bool
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidAttendanceRecord(data) {
+      return data.keys().hasAll([
+        'personType', 'personId', 'personNameSnapshot', 'attendanceDate',
+        'eventType', 'status', 'method', 'idempotencyKey'
+      ])
+        && data.keys().hasOnly([
+          'personType', 'personId', 'personNameSnapshot', 'nisSnapshot', 'niyNipSnapshot',
+          'classIdSnapshot', 'classNameSnapshot', 'attendanceDate', 'eventType',
+          'status', 'method', 'serverTimestamp', 'clientTimestamp', 'latitude',
+          'longitude', 'gpsAccuracyMeters', 'distanceFromSchoolMeters', 'geofencePassed',
+          'selfiePath', 'deviceInfo', 'idempotencyKey', 'corrected', 'correctionReason',
+          'anomalyFlags', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && data.personType in ['STUDENT', 'TEACHER']
+        && isStr(data.personId, 1, 128)
+        && isStr(data.personNameSnapshot, 1, 160)
+        && isStr(data.attendanceDate, 8, 16)
+        && data.eventType in ['CHECK_IN', 'CHECK_OUT']
+        && data.status in ['PRESENT', 'LATE', 'EXCUSED', 'SICK', 'ABSENT', 'REJECTED']
+        && data.method in ['QR', 'QR_SELFIE', 'SELF_SERVICE_SELFIE', 'MANUAL_CORRECTION']
+        && isStr(data.idempotencyKey, 1, 200)
+        && isOptStr(data, 'nisSnapshot', 64)
+        && isOptStr(data, 'niyNipSnapshot', 64)
+        && isOptStr(data, 'classIdSnapshot', 128)
+        && isOptStr(data, 'classNameSnapshot', 120)
+        && isOptTime(data, 'serverTimestamp')
+        && isOptTime(data, 'clientTimestamp')
+        && isOptNum(data, 'latitude')
+        && isOptNum(data, 'longitude')
+        && isOptNum(data, 'gpsAccuracyMeters')
+        && isOptNum(data, 'distanceFromSchoolMeters')
+        && isOptBool(data, 'geofencePassed')
+        && isOptStr(data, 'selfiePath', 500)
+        && isOptStr(data, 'deviceInfo', 500)
+        && isOptBool(data, 'corrected')
+        && isOptStr(data, 'correctionReason', 500)
+        && isOptList(data, 'anomalyFlags', 20)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidTeacherPermission(data) {
+      return data.keys().hasAll(['teacherId', 'teacherNameSnapshot', 'leaveType', 'reason', 'status'])
+        && data.keys().hasOnly([
+          'teacherId', 'teacherNameSnapshot', 'leaveType', 'startAt', 'endAt',
+          'reason', 'attachmentPaths', 'status', 'adminReview', 'principalDecision',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.teacherId, 1, 128)
+        && isStr(data.teacherNameSnapshot, 1, 160)
+        && data.leaveType in ['SICK', 'PERSONAL', 'OFFICIAL_DUTY', 'OTHER']
+        && isStr(data.reason, 1, 2000)
+        && data.status in ['SUBMITTED', 'ADMIN_REVIEWED', 'RETURNED', 'APPROVED', 'REJECTED', 'CANCELLED']
+        && isOptList(data, 'attachmentPaths', 10)
+        && isOptMap(data, 'adminReview')
+        && isOptMap(data, 'principalDecision')
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidFileMetadata(data) {
+      return data.keys().hasAll(['ownerType', 'ownerId', 'category', 'storagePath', 'mimeType', 'sizeBytes'])
+        && data.keys().hasOnly([
+          'ownerType', 'ownerId', 'category', 'storagePath', 'mimeType',
+          'sizeBytes', 'retentionUntil', 'dataBase64', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && data.ownerType in ['STUDENT', 'TEACHER', 'SCHOOL']
+        && isStr(data.ownerId, 1, 128)
+        && data.category in ['ATTENDANCE_SELFIE', 'PERMISSION_ATTACHMENT', 'STUDENT_PHOTO', 'TEACHER_PHOTO', 'BRANDING']
+        && isStr(data.storagePath, 1, 500)
+        && isStr(data.mimeType, 3, 120)
+        && data.sizeBytes is number && data.sizeBytes >= 0 && data.sizeBytes <= 10485760
+        && isOptStr(data, 'dataBase64', 1500000)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidUserSession(data) {
+      return data.keys().hasAll(['userId', 'sessionTokenHash'])
+        && data.keys().hasOnly([
+          'userId', 'sessionTokenHash', 'expiresAt', 'revokedAt', 'lastSeenAt',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.userId, 1, 128)
+        && isStr(data.sessionTokenHash, 16, 256)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['actorUserId', 'actorRole', 'action', 'entityType', 'entityId'])
+        && data.keys().hasOnly([
+          'actorUserId', 'actorRole', 'action', 'entityType', 'entityId',
+          'before', 'after', 'reason', 'ipHash', 'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.actorUserId, 1, 128)
+        && data.actorRole in ['SUPER_ADMIN', 'ADMIN', 'PRINCIPAL', 'OPERATOR', 'TEACHER']
+        && isStr(data.action, 1, 120)
+        && isStr(data.entityType, 1, 80)
+        && isStr(data.entityId, 1, 160)
+        && isOptMap(data, 'before')
+        && isOptMap(data, 'after')
+        && isOptStr(data, 'reason', 1000)
+        && isOptStr(data, 'ipHash', 128)
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidHoliday(data) {
+      return data.keys().hasAll(['date', 'name', 'scope', 'isActive'])
+        && data.keys().hasOnly(['date', 'name', 'scope', 'isActive', 'createdAt', 'updatedAt', 'createdBy'])
+        && isStr(data.date, 8, 16)
+        && isStr(data.name, 1, 160)
+        && data.scope in ['SCHOOL', 'STUDENT', 'TEACHER']
+        && data.isActive is bool
+        && hasValidBaseMeta(data);
+    }
+
+    function isValidRestorePoint(data) {
+      return data.keys().hasAll(['name', 'createdByName', 'counts', 'snapshot'])
+        && data.keys().hasOnly([
+          'name', 'note', 'createdByName', 'counts', 'snapshot',
+          'createdAt', 'updatedAt', 'createdBy'
+        ])
+        && isStr(data.name, 1, 160)
+        && isStr(data.createdByName, 1, 120)
+        && isOptStr(data, 'note', 500)
+        && data.counts is map
+        && data.snapshot is map
+        && hasValidBaseMeta(data);
+    }
+
+    match /publicSettings/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidPublicSettings(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /publicBrandingAssets/{assetId} {
+      allow get: if isValidId(assetId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(assetId) && isValidPublicBrandingAsset(request.resource.data);
+      allow delete: if isValidId(assetId);
+    }
+
+    match /admins/{uid} {
+      allow get: if isValidId(uid);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(uid) && isValidAdminAccount(request.resource.data);
+      allow delete: if isValidId(uid);
+    }
+
+    match /appSettings/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidAppSettings(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /users/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidUser(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /uniqueUsernames/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidUniqueUsername(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /students/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidStudent(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /teachers/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidTeacher(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /classes/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidSchoolClass(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /subjects/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidSubject(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /academicYears/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidAcademicYear(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /studentEnrollments/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidStudentEnrollment(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /teachingSchedules/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidTeachingSchedule(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /attendanceRules/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidAttendanceRule(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /schoolLocations/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidSchoolLocation(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /qrTokens/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidQrToken(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /attendanceRecords/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidAttendanceRecord(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /teacherPermissions/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidTeacherPermission(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /fileMetadata/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidFileMetadata(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /userSessions/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidUserSession(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /activityLogs/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create: if isValidId(docId) && isValidActivityLog(request.resource.data);
+      allow update: if false;
+      allow delete: if isValidId(docId);
+    }
+
+    match /holidays/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidHoliday(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /restorePoints/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if request.time != null;
+      allow create, update: if isValidId(docId) && isValidRestorePoint(request.resource.data);
+      allow delete: if isValidId(docId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
