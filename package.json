@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "engines": {
-    "node": "22.x"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "dev": "node node_modules/tsx/dist/cli.mjs server.ts",
@@ -52,7 +52,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
