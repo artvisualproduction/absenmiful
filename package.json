@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node node_modules/tsx/dist/cli.mjs server.ts",
     "start": "node node_modules/tsx/dist/cli.mjs server.ts",
-    "build": "node node_modules/vite/bin/vite.js build && node node_modules/esbuild/bin/esbuild backend/vercelEntry.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=api/_bundle.mjs",
+    "build": "node scripts/build.mjs",
     "preview": "node node_modules/vite/bin/vite.js preview",
     "clean": "node -e \"const fs=require('fs'); ['dist','server.js','api/_bundle.cjs','api/_bundle.mjs'].forEach(p => fs.rmSync(p, {recursive:true, force:true}))\"",
     "lint": "node node_modules/typescript/bin/tsc --noEmit",
